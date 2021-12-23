@@ -802,7 +802,7 @@ ChangeResult TypeAnalyzer::visitAtenLinearOp(
 
 // dim_out =
 //  floor((dim_in + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1
-static int64_t getOutputDimForConvOps(int64_t dimIn, int64_t padding,
+static int64_t getOutputDimForOpWithKernel(int64_t dimIn, int64_t padding,
                                       int64_t dilation, int64_t kernelSize,
                                       int64_t stride) {
   return ((dimIn + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1;
@@ -810,7 +810,7 @@ static int64_t getOutputDimForConvOps(int64_t dimIn, int64_t padding,
 
 template <class Op>
 std::vector<int64_t>
-computeConv2DOutputShape(Op op, const ValueKnowledge &ifm, int64_t features,
+computeOpWithKernelOutputShape(Op op, const ValueKnowledge &ifm, int64_t features,
                          int64_t kernelHeight, int64_t kernelWidth) {
   std::vector<int64_t> result;
   result.push_back(ifm.sizes[0]); // N
@@ -829,12 +829,12 @@ computeConv2DOutputShape(Op op, const ValueKnowledge &ifm, int64_t features,
 
   int64_t ifmHeight = ifm.sizes[2];
   if (ifmHeight != kUnknownSize && kernelHeight != kUnknownSize) {
-    result[2] = getOutputDimForConvOps(ifmHeight, padding[0], dilation[0],
+    result[2] = getOutputDimForOpWithKernel(ifmHeight, padding[0], dilation[0],
                                        kernelHeight, stride[0]);
   }
   int64_t ifmWidth = ifm.sizes[3];
   if (ifmWidth != kUnknownSize && kernelWidth != kUnknownSize) {
-    result[3] = getOutputDimForConvOps(ifmWidth, padding[1], dilation[1],
+    result[3] = getOutputDimForOpWithKernel(ifmWidth, padding[1], dilation[1],
                                        kernelWidth, stride[1]);
   }
 
@@ -848,7 +848,7 @@ ChangeResult TypeAnalyzer::visitAtenConv2dOp(
   knowledge.hasSizes = true;
   auto &ifm = operands[0]->getValue();
   auto &weights = operands[1]->getValue();
-  knowledge.sizes = computeConv2DOutputShape(
+  knowledge.sizes = computeOpWithKernelOutputShape(
       op, ifm, weights.sizes[0], weights.sizes[2], weights.sizes[3]);
 
   // Running some experiments in PyTorch, the bias doesn't seem to
@@ -867,7 +867,7 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
   SmallVector<int64_t, 2> kernelSize;
   if (!matchPattern(op.kernel_size(), m_TorchConstantIntList(kernelSize)))
     kernelSize = SmallVector<int64_t, 2>{kUnknownSize, kUnknownSize};
-  knowledge.sizes = computeConv2DOutputShape(op, ifm, ifm.sizes[1],
+  knowledge.sizes = computeOpWithKernelOutputShape(op, ifm, ifm.sizes[1],
                                              kernelSize[0], kernelSize[1]);
   knowledge.dtype = operands[0]->getValue().dtype;
   return getLatticeElement(op->getResult(0)).join(knowledge);
