@@ -18,6 +18,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
+#include "torch-mlir/Dialect/Torch/IR/TorchTypes.h"
 #include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
 #include "torch-mlir/Dialect/Torch/Utils/TorchUpstream.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
@@ -799,16 +800,61 @@ ChangeResult TypeAnalyzer::visitAtenLinearOp(
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
+// dim_out =
+//  floor((dim_in + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1
+static int64_t getOutputDimForConvOps(int64_t dimIn, int64_t padding,
+                                      int64_t dilation, int64_t kernelSize,
+                                      int64_t stride) {
+  return ((dimIn + 2 * padding - dilation * (kernelSize - 1) - 1) / stride) + 1;
+}
+
+template <class Op>
+std::vector<int64_t>
+computeConv2DOutputShape(Op op, const ValueKnowledge &ifm, int64_t features,
+                         int64_t kernelHeight, int64_t kernelWidth) {
+  std::vector<int64_t> result;
+  result.push_back(ifm.sizes[0]); // N
+  result.push_back(features);     // F
+  result.resize(4, kUnknownSize);
+
+  SmallVector<int64_t> padding;
+  if (!matchPattern(op.padding(), m_TorchConstantIntList(padding)))
+    return result;
+  SmallVector<int64_t, 2> stride;
+  if (!matchPattern(op.stride(), m_TorchConstantIntList(stride)))
+    return result;
+  SmallVector<int64_t, 2> dilation;
+  if (!matchPattern(op.dilation(), m_TorchConstantIntList(dilation)))
+    return result;
+
+  int64_t ifmHeight = ifm.sizes[2];
+  if (ifmHeight != kUnknownSize && kernelHeight != kUnknownSize) {
+    result[2] = getOutputDimForConvOps(ifmHeight, padding[0], dilation[0],
+                                       kernelHeight, stride[0]);
+  }
+  int64_t ifmWidth = ifm.sizes[3];
+  if (ifmWidth != kUnknownSize && kernelWidth != kUnknownSize) {
+    result[3] = getOutputDimForConvOps(ifmWidth, padding[1], dilation[1],
+                                       kernelWidth, stride[1]);
+  }
+
+  return result;
+}
+
 ChangeResult TypeAnalyzer::visitAtenConv2dOp(
     AtenConv2dOp op, ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   knowledge.hasSizes = true;
-  knowledge.sizes.resize(4, kUnknownSize);
+  auto &ifm = operands[0]->getValue();
+  auto &weights = operands[1]->getValue();
+  knowledge.sizes = computeConv2DOutputShape(
+      op, ifm, weights.sizes[0], weights.sizes[2], weights.sizes[3]);
+
   // Running some experiments in PyTorch, the bias doesn't seem to
   // contribute to the final element type.
-  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(
-      op->getContext(), {&operands[0]->getValue(), &operands[1]->getValue()});
+  knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(op->getContext(),
+                                                             {&ifm, &weights});
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
 
@@ -817,7 +863,12 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
   auto knowledge =
       ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
   knowledge.hasSizes = true;
-  knowledge.sizes.resize(4, kUnknownSize);
+  auto &ifm = operands[0]->getValue();
+  SmallVector<int64_t, 2> kernelSize;
+  if (!matchPattern(op.kernel_size(), m_TorchConstantIntList(kernelSize)))
+    kernelSize = SmallVector<int64_t, 2>{kUnknownSize, kUnknownSize};
+  knowledge.sizes = computeConv2DOutputShape(op, ifm, ifm.sizes[1],
+                                             kernelSize[0], kernelSize[1]);
   knowledge.dtype = operands[0]->getValue().dtype;
   return getLatticeElement(op->getResult(0)).join(knowledge);
 }
