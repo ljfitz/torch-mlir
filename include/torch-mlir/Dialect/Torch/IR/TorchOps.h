@@ -45,12 +45,33 @@ struct torch_constant_int_op_binder {
     return false;
   }
 };
+
+struct torch_constant_float_op_binder {
+  APFloat *bind_value;
+
+  /// Creates a matcher instance that binds the value to bv if match succeeds.
+  torch_constant_float_op_binder(APFloat *bv) : bind_value(bv) {}
+
+  bool match(Operation *op) {
+    if (auto constantFloat = dyn_cast<Torch::ConstantFloatOp>(op)) {
+      *bind_value = constantFloat.value();
+      return true;
+    }
+    return false;
+  }
+};
 } // namespace detail
 
 /// Matches the integer stored in a `torch.constant.bool`.
 inline detail::torch_constant_int_op_binder
 m_TorchConstantInt(int64_t *bind_value) {
   return detail::torch_constant_int_op_binder(bind_value);
+}
+
+/// Matches the integer stored in a `torch.constant.float`.
+inline detail::torch_constant_float_op_binder
+m_TorchConstantFloat(APFloat *bind_value) {
+  return detail::torch_constant_float_op_binder(bind_value);
 }
 
 namespace detail {

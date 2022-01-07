@@ -490,6 +490,8 @@ public:
       return visitAtenNllLossForwardOp(nllForwardOp, operands);
     } else if (auto nativeLayerNormOp = dyn_cast<AtenNativeLayerNormOp>(op)) {
       return visitAtenNativeLayerNormOp(nativeLayerNormOp, operands);
+    } else if (auto constantPadNdOp = dyn_cast<AtenConstantPadNdOp>(op)) {
+      return visitAtenConstantPadNdOp(constantPadNdOp, operands);
     }
 
     // Otherwise, this is an unknown operation. Just mark all results as
@@ -513,6 +515,9 @@ private:
   ChangeResult
   visitAtenMaxPool2dOp(AtenMaxPool2dOp op,
                        ArrayRef<LatticeElement<ValueKnowledge> *> operands);
+  ChangeResult
+  visitAtenConstantPadNdOp(AtenConstantPadNdOp op,
+                           ArrayRef<LatticeElement<ValueKnowledge> *> operands);
   ChangeResult visitAtenAdaptiveAvgPool2dOp(
       AtenAdaptiveAvgPool2dOp op,
       ArrayRef<LatticeElement<ValueKnowledge> *> operands);
@@ -948,6 +953,28 @@ ChangeResult TypeAnalyzer::visitAtenMaxPool2dOp(
     knowledge.sizes = computeOpWithKernelOutputShape(
         op, ifm, ifm.sizes[1], kernelSize[0], kernelSize[1]);
   else
+    knowledge.sizes.resize(4, kUnknownSize);
+  knowledge.dtype = operands[0]->getValue().dtype;
+  return getLatticeElement(op->getResult(0)).join(knowledge);
+}
+
+ChangeResult TypeAnalyzer::visitAtenConstantPadNdOp(
+    AtenConstantPadNdOp op,
+    ArrayRef<LatticeElement<ValueKnowledge> *> operands) {
+  auto knowledge =
+      ValueKnowledge::getNotNonePessimisticValueState(op->getContext());
+  knowledge.hasSizes = true;
+  auto &ifm = operands[0]->getValue();
+  SmallVector<int64_t, 4> padInts;
+  if (ifm.hasSizes && matchPattern(op.pad(), m_TorchConstantIntList(padInts))) {
+    knowledge.sizes = ifm.sizes;
+    uint64_t padRank = padInts.size() / 2;
+    uint64_t padOffset = knowledge.sizes.size() - padRank;
+    // op.pad() is higest dim first ordered pairs of low,high
+    for (uint64_t i = padRank, r = padOffset; i > 0; --i, ++r) {
+      knowledge.sizes[r] += padInts[i * 2 - 2] + padInts[i * 2 - 1];
+    }
+  } else
     knowledge.sizes.resize(4, kUnknownSize);
   knowledge.dtype = operands[0]->getValue().dtype;
   return getLatticeElement(op->getResult(0)).join(knowledge);

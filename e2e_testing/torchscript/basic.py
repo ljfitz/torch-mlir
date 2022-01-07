@@ -284,6 +284,47 @@ def MaxPool2dModule_basic(module, tu: TestUtils):
     module.forward(tu.rand(1, 1, 20, 20) - 0.5)
 
 
+class ConstantPad2dStaticModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.pad2d = torch.nn.ConstantPad2d((0, 1, 2, 3), -float('inf'))
+
+    @export
+    @annotate_args([
+        None,
+        ([1, 1, 20, 20], torch.float32, True),
+    ])
+    def forward(self, x):
+        return self.pad2d(x)
+
+# ==============================================================================
+
+
+@register_test_case(module_factory=lambda: ConstantPad2dStaticModule())
+def ConstantPad2dStaticModule_basic(module, tu: TestUtils):
+    module.forward(tu.rand(1, 1, 20, 20) - 0.5)
+
+
+class ConstantPadNdStaticModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([1, 1, 20, 20, 4, 4], torch.float32, True),
+    ])
+    def forward(self, x):
+        return torch.ops.aten.constant_pad_nd(x, (0, 1), -float('inf'))
+
+# ==============================================================================
+
+
+@register_test_case(module_factory=lambda: ConstantPadNdStaticModule())
+def ConstantPadNdStaticModule_basic(module, tu: TestUtils):
+    module.forward(tu.rand(1, 1, 20, 20, 4, 4) - 0.5)
+
+
 class TransposeIntModule(torch.nn.Module):
     def __init__(self):
         super().__init__()

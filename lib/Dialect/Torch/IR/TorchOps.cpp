@@ -13,8 +13,10 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
 #include "torch-mlir/Dialect/Torch/Utils/Utils.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 using namespace mlir::torch;
@@ -654,6 +656,33 @@ OpFoldResult AtenEqIntOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// AtenEqFloatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AtenEqFloatOp::fold(ArrayRef<Attribute> operands) {
+  APFloat lhs(0.0f), rhs(0.0f);
+
+  if (!matchPattern(getOperand(0), m_TorchConstantFloat(&lhs)) ||
+      !matchPattern(getOperand(1), m_TorchConstantFloat(&rhs)))
+    return nullptr;
+
+  return getI1IntegerAttr(getContext(), lhs.compare(rhs) == APFloat::cmpEqual);
+}
+
+//===----------------------------------------------------------------------===//
+// AtenEqStrOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AtenEqStrOp::fold(ArrayRef<Attribute> operands) {
+  auto aStr = a().getDefiningOp<ConstantStrOp>();
+  auto bStr = b().getDefiningOp<ConstantStrOp>();
+
+  if (aStr && bStr)
+    return getI1IntegerAttr(getContext(), aStr == bStr);
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // AtenLtIntOp
 //===----------------------------------------------------------------------===//
 
@@ -1006,6 +1035,20 @@ void PrimTupleIndexOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 }
 
 //===----------------------------------------------------------------------===//
+// PrimUninitializedOp
+//===----------------------------------------------------------------------===//
+
+void PrimUninitializedOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                    MLIRContext *context) {
+  patterns.add(+[](PrimUninitializedOp op, PatternRewriter &rewriter) {
+    if (! op.use_empty())
+      return failure();
+    rewriter.eraseOp(op);
+    return success();
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // PrimTupleUnpackOp
 //===----------------------------------------------------------------------===//
 
@@ -1126,6 +1169,18 @@ OpFoldResult AtenMulIntOp::fold(ArrayRef<Attribute> operands) {
     return getI64IntegerAttr(getContext(), 0);
   if (lConstant && rConstant)
     return getI64IntegerAttr(getContext(), lhs * rhs);
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// AtenNegIntOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AtenNegIntOp::fold(ArrayRef<Attribute> operands) {
+  int64_t c;
+  bool constant = matchPattern(getOperand(), m_TorchConstantInt(&c));
+  if (constant)
+    return getI64IntegerAttr(getContext(), -c);
   return nullptr;
 }
 
