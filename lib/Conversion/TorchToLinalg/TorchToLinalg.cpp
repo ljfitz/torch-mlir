@@ -943,7 +943,7 @@ public:
     Value lhs = adaptor.self();
     Value rhs = adaptor.mat2();
 
-    // A user can write an errorneous program where `aten.mm` is in fact called
+    // A user can write an erroneous program where `aten.mm` is in fact called
     // with operands of invalid rank or dtype. We cannot convert to linalg in
     // this case or we will get a verifier error, which corresponds to breaking
     // of *internal* compiler invariants, and for a user manifests as a compiler
@@ -974,12 +974,8 @@ public:
 
     Type newResultType = getTypeConverter()->convertType(op.getType());
     Type elementType = newResultType.cast<TensorType>().getElementType();
-    Value initTensor = rewriter.create<linalg::InitTensorOp>(
-        loc, ValueRange{lhsDim0, rhsDim1}, elementType);
-    Value c0 = rewriter.create<arith::ConstantOp>(
-        loc, FloatAttr::get(elementType, 0.0));
-    Value zeroFill =
-        rewriter.create<linalg::FillOp>(loc, c0, initTensor).getResult(0);
+    Value zeroFill = createZeroInitTensor(
+      rewriter, loc, ValueRange{lhsDim0, rhsDim1}, elementType);
     Value matmul = rewriter
                        .create<linalg::MatmulOp>(loc, zeroFill.getType(),
                                                  ValueRange{lhs, rhs}, zeroFill)
