@@ -11,6 +11,7 @@
 #include "function_importer.h"
 #include "ivalue_importer.h"
 
+#include <ATen/TensorUtils.h>
 #include <unordered_map>
 
 #include "mlir_utils.h"
@@ -194,7 +195,6 @@ MlirType torch_mlir::getMlirTypeFromTorchType(MlirLocation loc,
     return torchMlirTorchNoneTypeGet(context);
   }
   case TypeKind::AnyType: {
-    auto anyType = torchType->cast<c10::AnyType>();
     return torchMlirTorchAnyTypeGet(context);
   }
   case TypeKind::ClassType: {

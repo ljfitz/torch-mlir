@@ -321,9 +321,9 @@ static ParseResult parsePrimIfOp(OpAsmParser &parser, OperationState &result) {
 
 static void print(OpAsmPrinter &p, PrimIfOp op) {
   p << " " << op.condition();
-  p << " -> (" << op.getResultTypes() << ")";
+  p << " -> (" << op.getResultTypes() << ") ";
   p.printRegion(op.thenRegion(), /*printEntryBlockArgs=*/false);
-  p << " else";
+  p << " else ";
   p.printRegion(op.elseRegion(), /*printEntryBlockArgs=*/false);
 
   p.printOptionalAttrDict(op->getAttrs());
@@ -1033,20 +1033,6 @@ void PrimTupleIndexOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
       return failure();
 
     rewriter.replaceOp(op, tupleConstruct.elements()[i]);
-    return success();
-  });
-}
-
-//===----------------------------------------------------------------------===//
-// PrimUninitializedOp
-//===----------------------------------------------------------------------===//
-
-void PrimUninitializedOp::getCanonicalizationPatterns(
-    RewritePatternSet &patterns, MLIRContext *context) {
-  patterns.add(+[](PrimUninitializedOp op, PatternRewriter &rewriter) {
-    if (!op.use_empty())
-      return failure();
-    rewriter.eraseOp(op);
     return success();
   });
 }
