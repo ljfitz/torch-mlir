@@ -36,17 +36,13 @@ macro(torch_mlir_add_llvm_external_project name identifier location)
   set(LLVM_EXTERNAL_PROJECTS ${LLVM_EXTERNAL_PROJECTS} CACHE STRING "" FORCE)
 endmacro()
 
-torch_mlir_add_llvm_external_project(
-  torch-mlir-dialects
-  TORCH_MLIR_DIALECTS
-  ${CMAKE_CURRENT_SOURCE_DIR}/external/llvm-external-projects/torch-mlir-dialects)
-
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Out-of-tree build
 
   #-------------------------------------------------------------------------------
   # MLIR/LLVM Configuration
   #-------------------------------------------------------------------------------
+  set(LLVM_OUT_OF_TREE_BUILD TRUE)
 
   find_package(MLIR REQUIRED CONFIG)
   message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
@@ -83,6 +79,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   add_subdirectory(external/llvm-external-projects/torch-mlir-dialects)
 else()
   # In-tree build with LLVM_EXTERNAL_PROJECTS=torch-mlir
+  torch_mlir_add_llvm_external_project(
+    torch-mlir-dialects
+    TORCH_MLIR_DIALECTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/llvm-external-projects/torch-mlir-dialects)
+  
   # FIXME: This should really be inherited from the LLVM tree.  In particular,
   # it's going to change when cross-compiling.
   set(MLIR_TABLEGEN_EXE mlir-tblgen)
