@@ -138,7 +138,7 @@ builtin.func private @tensor.invalid_dtype() -> !torch.tensor<*,tuple<>>
 
 builtin.func @torch.tensor() {
   // Incompatible shape.
-  // expected-error@+1 {{incompatible}}
+  // expected-error@+1 {{must be Multi-dimensional array modeling Torch's Tensor type}}
   %0 = torch.tensor.literal(dense<42.0> : tensor<3x2xf32>) : !torch.vtensor<[],f32>
   return
 }
@@ -147,7 +147,7 @@ builtin.func @torch.tensor() {
 
 builtin.func @torch.tensor() {
   // Incompatible dtype.
-  // expected-error@+1 {{incompatible}}
+  // expected-error@+1 {{must be Multi-dimensional array modeling Torch's Tensor type}}
   %0 = torch.tensor.literal(dense<42.0> : tensor<f32>) : !torch.vtensor<[],f64>
   return
 }
@@ -156,7 +156,7 @@ builtin.func @torch.tensor() {
 
 builtin.func @torch.tensor() {
   // Incompatible type.
-  // expected-error@+1 {{incompatible}}
+  // expected-error@+1 {{must be Multi-dimensional array modeling Torch's Tensor type}}
   %0 = torch.tensor.literal(dense<42.0> : tensor<f32>) : i1
   return
 }

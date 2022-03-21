@@ -26,15 +26,19 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 14)
 
 macro(torch_mlir_add_llvm_external_project name identifier location)
-  message(STATUS "Adding LLVM external project ${name} (${identifier}) -> ${location}")
-  if(NOT EXISTS "${location}/CMakeLists.txt")
-    message(FATAL_ERROR "External project location ${location} is not valid")
-  endif()
-  list(APPEND LLVM_EXTERNAL_PROJECTS ${name})
-  list(REMOVE_DUPLICATES LLVM_EXTERNAL_PROJECTS)
-  set(LLVM_EXTERNAL_${identifier}_SOURCE_DIR ${location} CACHE STRING "" FORCE)
-  set(LLVM_EXTERNAL_PROJECTS ${LLVM_EXTERNAL_PROJECTS} CACHE STRING "" FORCE)
-endmacro()
+message(STATUS "Adding LLVM external project ${name} (${identifier}) -> ${location}")
+if(NOT EXISTS "${location}/CMakeLists.txt")
+message(FATAL_ERROR "External project location ${location} is not valid")
+endif()  
+list(APPEND LLVM_EXTERNAL_PROJECTS ${name})
+list(REMOVE_DUPLICATES LLVM_EXTERNAL_PROJECTS)
+set(LLVM_EXTERNAL_${identifier}_SOURCE_DIR ${location} CACHE STRING "" FORCE)
+set(LLVM_EXTERNAL_PROJECTS ${LLVM_EXTERNAL_PROJECTS} CACHE STRING "" FORCE)
+endmacro()  
+
+set(TORCH_MLIR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(TORCH_MLIR_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "Building torch-mlir project at ${TORCH_MLIR_SOURCE_DIR} (into ${TORCH_MLIR_BINARY_DIR})")
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Out-of-tree build
@@ -59,7 +63,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(LIT_ARGS_DEFAULT "-sv")
   if (MSVC_IDE OR XCODE)
     set(LIT_ARGS_DEFAULT "${LIT_ARGS_DEFAULT} --no-progress-bar")
-  endif()
+  endif()  
   set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
 
   list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
@@ -77,14 +81,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(TORCH-MLIR_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
   add_subdirectory(external/llvm-external-projects/torch-mlir-dialects)
-else()
+else()  
   # In-tree build with LLVM_EXTERNAL_PROJECTS=torch-mlir
   torch_mlir_add_llvm_external_project(
     torch-mlir-dialects
     TORCH_MLIR_DIALECTS
     ${CMAKE_CURRENT_SOURCE_DIR}/external/llvm-external-projects/torch-mlir-dialects)
   
-  # FIXME: This should really be inherited from the LLVM tree.  In particular,
+  # FIXME: This should really be inherited from the LLVM tree.  In particular,  
   # it's going to change when cross-compiling.
   set(MLIR_TABLEGEN_EXE mlir-tblgen)
 
@@ -96,11 +100,7 @@ else()
   set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include)
   set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
   set(MLIR_INCLUDE_DIRS "${MLIR_INCLUDE_DIR};${MLIR_GENERATED_INCLUDE_DIR}")
-endif()
-
-set(TORCH_MLIR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(TORCH_MLIR_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-message(STATUS "Building torch-mlir project at ${TORCH_MLIR_SOURCE_DIR} (into ${TORCH_MLIR_BINARY_DIR})")
+endif()  
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
