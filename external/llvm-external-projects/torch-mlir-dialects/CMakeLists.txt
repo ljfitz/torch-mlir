@@ -2,36 +2,26 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(LLVM_OUT_OF_TREE_BUILD TRUE)
 endif()
 
-if(${LLVM_OUT_OF_TREE_BUILD})
-  set(TORCH_MLIR_DIALECTS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-  set(TORCH_MLIR_DIALECTS_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-  message(STATUS "Building torch-mlir-dialects project at ${TORCH_MLIR_DIALECTS_SOURCE_DIR} (into ${TORCH_MLIR_DIALECTS_BINARY_DIR})")
-  set(MLIR_GENERATED_INCLUDE_DIR ${MLIR_INCLUDE_DIR})
-else()
-option(MLIR_ENABLE_BINDINGS_PYTHON "Enables MLIR Python Bindings" OFF)
-
 set(TORCH_MLIR_DIALECTS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(TORCH_MLIR_DIALECTS_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "Building torch-mlir-dialects project at ${TORCH_MLIR_DIALECTS_SOURCE_DIR} (into ${TORCH_MLIR_DIALECTS_BINARY_DIR})")
+option(MLIR_ENABLE_BINDINGS_PYTHON "Enables MLIR Python Bindings" OFF)
 
-# TODO: Fix this upstream so that global include directories are not needed.
-set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir)
-set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include)
-set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
+if(${LLVM_OUT_OF_TREE_BUILD})
+  set(MLIR_GENERATED_INCLUDE_DIR ${MLIR_INCLUDE_DIR})
+else()
+  set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir)
+  set(MLIR_INCLUDE_DIRS ${LLVM_MAIN_SRC_DIR}/../mlir/include)
+  set(MLIR_GENERATED_INCLUDE_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
 
-# TODO: Needed for tablegen. Remove.
-include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
-include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
-include_directories(SYSTEM ${TORCH_MLIR_DIALECTS_SOURCE_DIR}/include)
+  # Configure CMake and tablegen.
+  list(APPEND CMAKE_MODULE_PATH ${MLIR_MAIN_SRC_DIR}/cmake/modules)
+  list(APPEND CMAKE_MODULE_PATH ${LLVM_MAIN_SRC_DIR}/cmake)
+  set(MLIR_TABLEGEN_EXE mlir-tblgen)
 
-# Configure CMake and tablegen.
-list(APPEND CMAKE_MODULE_PATH ${MLIR_MAIN_SRC_DIR}/cmake/modules)
-list(APPEND CMAKE_MODULE_PATH ${LLVM_MAIN_SRC_DIR}/cmake)
-set(MLIR_TABLEGEN_EXE mlir-tblgen)
-
-include(TableGen)
-include(AddLLVM)
-include(AddMLIR)
+  include(TableGen)
+  include(AddLLVM)
+  include(AddMLIR)
 endif()
 
 function(torch_mlir_dialects_target_includes target)
@@ -54,6 +44,7 @@ function(torch_mlir_dialects_target_includes target)
   endif()
 endfunction()
 
+# TODO: Needed for tablegen. Remove.
 include_directories(SYSTEM ${MLIR_INCLUDE_DIRS})
 include_directories(SYSTEM ${MLIR_GENERATED_INCLUDE_DIR})
 include_directories(SYSTEM ${TORCH_MLIR_DIALECTS_SOURCE_DIR}/include)
