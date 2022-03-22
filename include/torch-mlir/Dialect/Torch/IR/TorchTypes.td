@@ -26,20 +26,26 @@ class Torch_TypeWithContainedType<string name, string typeMnemonic> : Torch_Type
   let parameters = (ins "::mlir::Type":$containedType);
 
   let printer = [{
-    $_printer << "<" << getImpl()->containedType << ">";
+    $_printer << "<";
+    // Print the contained type without the `!torch.` prefix.
+    printTorchDialectType(getImpl()->containedType, $_printer);
+    $_printer << ">";
   }];
 
   let parser = [{
-    if (parser.parseLess())
+    if ($_parser.parseLess())
       return Type();
-    Type containedType;
-    if ($_parser.parseType(containedType))
+
+    // Parse the contained type, but forward directly to our internal parsing
+    // of `torch` dialect types, so that we can parse nested types without
+    // the `!torch.` prefix.
+    Type containedType = parseTorchDialectType($_parser);
+    if (!containedType)
       return Type();
     if ($_parser.parseGreater())
       return Type();
     return get($_ctxt, containedType);
   }];
-
   let builders = [
     TypeBuilderWithInferredContext<(ins "::mlir::Type":$containedType), [{
       return Base::get(containedType.getContext(), containedType);
@@ -61,9 +67,9 @@ def Torch_NnModuleType : Torch_Type<"NnModule", "nn.Module"> {
   }];
 
   let parser = [{
-    if (parser.parseLess())
+    if ($_parser.parseLess())
       return Type();
-    std::string className;
+   std::string className;
     if ($_parser.parseOptionalString(&className))
       return Type();
     if ($_parser.parseGreater())
@@ -243,6 +249,10 @@ def Torch_DeviceType : Torch_Type<"Device", "Device"> {
   let summary = "Torch device";
 }
 
+def Torch_GeneratorType : Torch_Type<"Generator", "Generator"> {
+  let summary = "Torch Generator for producing valsem-random numbers";
+}
+
 def Torch_BoolType : Torch_Type<"Bool", "bool"> {
   let summary = "Torch BoolType";
   let description = [{
@@ -341,25 +351,28 @@ def Torch_DictType : Torch_Type<"Dict", "dict"> {
   }];
 
   let printer = [{
-    $_printer << "<" << getImpl()->keyType << ", " << getImpl()->valueType << ">";
+    $_printer << "<";
+    printTorchDialectType(getImpl()->keyType, $_printer);
+    $_printer << ", ";
+    printTorchDialectType(getImpl()->valueType, $_printer);
+    $_printer<< ">";
   }];
 
   let parser = [{
-    if (parser.parseLess())
+    if ($_parser.parseLess())
       return Type();
-    Type keyType;
-    if ($_parser.parseType(keyType))
+    Type keyType = parseTorchDialectType($_parser);
+    if (!keyType)
       return Type();
     if ($_parser.parseComma())
       return Type();
-    Type valueType;
-    if ($_parser.parseType(valueType))
+    Type valueType = parseTorchDialectType($_parser);
+    if (!valueType)
       return Type();
     if ($_parser.parseGreater())
       return Type();
     return get($_ctxt, keyType, valueType);
   }];
-
   let builders = [
     TypeBuilderWithInferredContext<(ins "::mlir::Type":$keyType,
                                         "::mlir::Type":$valueType), [{
@@ -380,8 +393,12 @@ def AnyTorchOptionalTensorType :
 def TorchOptionalIntType: OptionalOf<Torch_IntType, "Optional torch int type">;
 def TorchOptionalBoolType:
       OptionalOf<Torch_BoolType, "Optional torch bool type">;
+def TorchOptionalStringType:
+      OptionalOf<Torch_StringType, "Optional torch Str type">;
 def TorchOptionalDeviceType:
       OptionalOf<Torch_DeviceType, "Optional torch device type">;
+def TorchOptionalGeneratorType:
+      OptionalOf<Torch_GeneratorType, "Optional torch Generator type">;
 
 def IsListTypePred : CPred<"$_self.isa<::mlir::torch::Torch::ListType>()">;
 class ListOf<list<Type> allowedTypes, string descr> :
@@ -428,6 +445,7 @@ def AnyTorchType : AnyTypeOf<[
   Torch_BoolType,
   Torch_DictType,
   Torch_DeviceType,
+  Torch_GeneratorType,
   Torch_ListType,
   Torch_LinearParamsType,
   Torch_NumberType,

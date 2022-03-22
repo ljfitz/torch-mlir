@@ -12,6 +12,8 @@
 
 #include <unordered_map>
 
+#include "class_annotator.h"
+#include "ivalue_importer.h"
 #include "mlir_utils.h"
 
 #include "mlir-c/BuiltinAttributes.h"
@@ -114,7 +116,8 @@ void NodeImporter::importNode(Node *node, MlirBlock appendToBlock) {
   case c10::prim::ListUnpack:
   case c10::prim::ListConstruct:
   case c10::prim::TupleConstruct:
-  case c10::prim::DictConstruct: {
+  case c10::prim::DictConstruct:
+  case c10::prim::CreateObject: {
     createAndMapTrivialNode(
         node, "torch.prim." + std::string(kind.toUnqualString()), transformer);
     return;
@@ -175,11 +178,19 @@ void NodeImporter::importNode(Node *node, MlirBlock appendToBlock) {
       torch::jit::Function *function = functionType->function();
       const std::string &symName = function->qualname().qualifiedName();
       op = createMlirOperation(
-          "std.constant", loc,
+          "func.constant", loc,
           getFunctionTypeFromSchema(context, function->getSchema()),
           toMlirNamedAttribute(
               "value",
               mlirFlatSymbolRefAttrGet(context, toMlirStringRef(symName))));
+    } else if (output->type()->cast<c10::ListType>()) {
+      ClassAnnotator dummyAnnotator;
+      MlirValue listValue = importIValue(node->ival(c10::attr::value),
+                                         appendToBlock,
+                                         context,
+                                         dummyAnnotator);
+      mapResults(node, mlirOpResultGetOwner(listValue));
+      return; // Early return, since `importIValue` already added op to block.
     } else {
       std::stringstream msg;
       msg << "unhandled prim::Constant node: ";
@@ -269,7 +280,7 @@ void NodeImporter::importNode(Node *node, MlirBlock appendToBlock) {
       return getMlirTypeFromTorchType(loc, v->type());
     });
     MlirOperation operation = createMlirOperationAtEnd(
-        appendToBlock, "std.call_indirect", loc,
+        appendToBlock, "func.call_indirect", loc,
         getMlirTypesFromValues(loc, node->outputs()),
         lookupMappedValue(node->input(0)),
         derefineValues(lookupMappedValues(node->inputs().slice(1)),

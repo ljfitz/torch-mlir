@@ -8,16 +8,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "torch-mlir/Dialect/TorchConversion/Transforms/Passes.h"
+#include "mlir/Conversion/Passes.h"
+#include "mlir/Dialect/Func/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
-#include "mlir/Dialect/StandardOps/Transforms/Passes.h"
 #include "mlir/Dialect/Tosa/Transforms/Passes.h"
-#include "mlir/Conversion/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 #include "torch-mlir/Conversion/TorchToLinalg/TorchToLinalg.h"
 #include "torch-mlir/Conversion/TorchToSCF/TorchToSCF.h"
 #include "torch-mlir/Conversion/TorchToStd/TorchToStd.h"
+#include "torch-mlir/Conversion/TorchToTMTensor/TorchToTMTensor.h"
 #include "torch-mlir/Conversion/TorchToTosa/TorchToTosa.h"
 #include "torch-mlir/Dialect/Torch/Transforms/Passes.h"
 
@@ -58,10 +59,11 @@ void TorchConversion::createTorchBackendToLinalgOnTensorsBackendPipeline(
   // We do this first as it tends to involve pattern-matching against constants,
   // (e.g. dimensions which must be constant in a ranked programming model)
   // and those constants get somewhat obscured by TorchToStd.
+  pm.addNestedPass<FuncOp>(createConvertTorchToTMTensorPass());
   pm.addNestedPass<FuncOp>(createConvertTorchToLinalgPass());
   pm.addNestedPass<FuncOp>(createConvertTorchToStdPass());
   pm.addNestedPass<FuncOp>(createConvertTorchToSCFPass());
-  pm.addNestedPass<FuncOp>(createStdExpandOpsPass());
+  pm.addNestedPass<FuncOp>(memref::createExpandOpsPass());
 
   if (options.optimize) {
     // Clean up any non-canonical code introduced above..

@@ -17,8 +17,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "torch-mlir/Dialect/Torch/IR/TorchTypes.td"
 include "torch-mlir/Dialect/TorchConversion/IR/TorchConversionBase.td"
 
-class TorchConversion_Op<string mnemonic, list<OpTrait> traits = []>
-    : Op<TorchConversion_Dialect, mnemonic, traits> {
+class TorchConversion_Op<string mnemonic, list<Trait> traits = []>
+    : Op<TorchConversion_Dialect, mnemonic, !listconcat(traits, [NoSideEffect])> {
 }
 
 //===----------------------------------------------------------------------===//
@@ -170,4 +170,58 @@ def TorchConversion_FromF64Op : TorchConversion_Op<"from_f64", [
   }];
 }
 
+def TorchConversion_I64ToGeneratorOp : TorchConversion_Op<"i64_to_generator", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>
+  ]> {
+  let summary = "Convert an `i64` to an `Generator`";
+  let description = [{
+    This op is primarily useful as a materialization during dialect conversion.
+  }];
+  let arguments = (ins
+    I64:$operand
+  );
+  let results = (outs
+    Torch_GeneratorType:$result
+  );
+  let assemblyFormat = [{
+    $operand attr-dict
+  }];
+}
+
+def TorchConversion_GeneratorToI64Op : TorchConversion_Op<"generator_to_i64", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>
+  ]> {
+  let summary = "Convert a `Generator` to a `i64`";
+  let description = [{
+    This op is primarily useful as a materialization during dialect conversion.
+  }];
+  let arguments = (ins
+    Torch_GeneratorType:$operand
+  );
+  let results = (outs
+    I64:$result
+  );
+  let assemblyFormat = [{
+    $operand attr-dict
+  }];
+}
+
+class TorchConversionWithSideEffect_Op<string mnemonic, list<Trait> traits = []>
+    : Op<TorchConversion_Dialect, mnemonic, traits> {
+}
+
+def TorchConversion_GetNextSeedOp: TorchConversionWithSideEffect_Op<"get_next_seed", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  ]> {
+  let summary = "Get the next global seed";
+  let description = [{
+    This op is for getting the next global seed for RNG
+  }];
+  let results = (outs
+    I64:$result
+  );
+  let assemblyFormat = [{
+    attr-dict `:` `(``)` `->` qualified(type($result))
+  }];
+}
 #endif // TORCHCONVERSION_OPS

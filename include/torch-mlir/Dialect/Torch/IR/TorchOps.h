@@ -60,6 +60,21 @@ struct torch_constant_float_op_binder {
     return false;
   }
 };
+
+struct torch_constant_str_op_binder {
+  std::string &bind_value;
+
+  /// Creates a matcher instance that binds the value to bv if match succeeds.
+  torch_constant_str_op_binder(std::string &bv) : bind_value(bv) {}
+
+  bool match(Operation *op) {
+    if (auto constantString = dyn_cast<Torch::ConstantStrOp>(op)) {
+      bind_value = constantString.value().str();
+      return true;
+    }
+    return false;
+  }
+};
 } // namespace detail
 
 /// Matches the integer stored in a `torch.constant.bool`.
@@ -72,6 +87,12 @@ m_TorchConstantInt(int64_t *bind_value) {
 inline detail::torch_constant_float_op_binder
 m_TorchConstantFloat(double *bind_value) {
   return detail::torch_constant_float_op_binder(bind_value);
+}
+
+/// Matches the string value stored in a `torch.constant.str`.
+inline detail::torch_constant_str_op_binder
+m_TorchConstantStr(std::string &bind_value) {
+  return detail::torch_constant_str_op_binder(bind_value);
 }
 
 namespace detail {
@@ -165,6 +186,16 @@ m_TorchTensorSizeInt(Value tensor, int64_t *dim) {
 /// 2. Performing the copy, which allows us to add/remove value semantics.
 Value copyTensorToType(OpBuilder &builder, Location loc, BaseTensorType newType,
                        Value tensor);
+
+/// Returns true if `list` is potentially mutated.
+bool isListPotentiallyMutated(Value list);
+
+/// Returns true if `op` might mutate any lists that it has as operands.
+///
+/// A return value of true does not guarantee that the operation mutates
+/// the list.
+bool potentiallyMutatesListOperands(Operation *op);
+
 } // namespace Torch
 } // namespace torch
 } // namespace mlir

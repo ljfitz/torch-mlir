@@ -9,11 +9,16 @@
 
 #include "PassDetail.h"
 
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "torch-mlir-dialects/Dialect/TMTensor/IR/TMTensorDialect.h"
+#include "torch-mlir-dialects/Dialect/TMTensor/IR/TMTensorOps.h"
+#include "torch-mlir/Dialect/TorchConversion/IR/TorchConversionOps.h"
 #include "torch-mlir/Dialect/TorchConversion/Transforms/Passes.h"
 
 #include "mlir/IR/BuiltinOps.h"
@@ -21,6 +26,8 @@
 using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::TorchConversion;
+using namespace TMTensor;
+
 
 namespace {
 class VerifyLinalgOnTensorsBackendContractPass
@@ -53,10 +60,13 @@ class VerifyLinalgOnTensorsBackendContractPass
     ConversionTarget target(*context);
 
     // Structural operations.
-    target.addDynamicallyLegalOp<ModuleOp, FuncOp, ReturnOp>(opHasLegalTypes);
+    target.addDynamicallyLegalOp<ModuleOp, FuncOp, func::ReturnOp>(
+        opHasLegalTypes);
+
+    target.addDynamicallyLegalOp<GetNextSeedOp>(opHasLegalTypes);
 
     // Basic scalar operations.
-    target.addDynamicallyLegalDialect<StandardOpsDialect>(isLegalScalarOp);
+    target.addDynamicallyLegalDialect<func::FuncDialect>(isLegalScalarOp);
     target.addDynamicallyLegalDialect<math::MathDialect>(isLegalScalarOp);
     target.addDynamicallyLegalDialect<arith::ArithmeticDialect>(
         isLegalScalarOp);
@@ -65,9 +75,9 @@ class VerifyLinalgOnTensorsBackendContractPass
     target.addDynamicallyLegalDialect<linalg::LinalgDialect>(opHasLegalTypes);
     target.addDynamicallyLegalDialect<tensor::TensorDialect>(opHasLegalTypes);
     target.addDynamicallyLegalDialect<AffineDialect>(opHasLegalTypes);
+    target.addDynamicallyLegalDialect<cf::ControlFlowDialect>(opHasLegalTypes);
+    target.addDynamicallyLegalDialect<TMTensorDialect>(opHasLegalTypes);
 
-    // AssertOp is used to terminate the program for error guards.
-    target.addLegalOp<AssertOp>();
     // ConstantOp is used for tensors and for scalars.
     target.addDynamicallyLegalOp<arith::ConstantOp>(opHasLegalTypes);
 

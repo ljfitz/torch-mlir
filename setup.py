@@ -62,8 +62,9 @@ class CMakeBuild(build_py):
                 f"-DLLVM_TARGETS_TO_BUILD=host",
                 f"-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
                 f"-DLLVM_ENABLE_PROJECTS=mlir",
-                f"-DLLVM_EXTERNAL_PROJECTS=torch-mlir",
+                f"-DLLVM_EXTERNAL_PROJECTS=torch-mlir;torch-mlir-dialects",
                 f"-DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR={src_dir}",
+                f"-DLLVM_EXTERNAL_TORCH_MLIR_DIALECTS_SOURCE_DIR={src_dir}/external/llvm-external-projects/torch-mlir-dialects",
                 # Optimization options for building wheels.
                 f"-DCMAKE_VISIBILITY_INLINES_HIDDEN=ON",
                 f"-DCMAKE_C_VISIBILITY_PRESET=hidden",
@@ -82,10 +83,13 @@ class CMakeBuild(build_py):
         python_package_dir = os.path.join(cmake_build_dir,
                                           "tools", "torch-mlir", "python_packages",
                                           "torch_mlir")
+
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir, ignore_errors=False, onerror=None)
+
         shutil.copytree(python_package_dir,
                         target_dir,
-                        symlinks=False,
-                        dirs_exist_ok=True)
+                        symlinks=False)
 
 
 class CMakeExtension(Extension):

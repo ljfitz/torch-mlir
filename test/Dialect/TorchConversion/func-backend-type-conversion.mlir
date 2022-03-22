@@ -12,11 +12,11 @@ func @identity(%arg0: !torch.vtensor<[],f32>) -> !torch.vtensor<[],f32> {
 
 // CHECK-LABEL:   func @block_arguments(
 // CHECK-SAME:        %[[ARG:.*]]: tensor<f32>) -> tensor<f32> {
-// CHECK:           br ^bb1(%[[ARG]] : tensor<f32>)
+// CHECK:           cf.br ^bb1(%[[ARG]] : tensor<f32>)
 // CHECK:         ^bb1(%[[BBARG:.*]]: tensor<f32>):
 // CHECK:           return %[[BBARG]] : tensor<f32>
 func @block_arguments(%arg0: !torch.vtensor<[],f32>) -> !torch.vtensor<[],f32> {
-  br ^bb1(%arg0: !torch.vtensor<[],f32>)
+  cf.br ^bb1(%arg0: !torch.vtensor<[],f32>)
 ^bb1(%bbarg: !torch.vtensor<[],f32>):
   return %bbarg : !torch.vtensor<[],f32>
 }
@@ -55,7 +55,7 @@ func @unconverted_op_in_body() -> !torch.vtensor<[],f32> {
 // update all terminators and issue an error if that is not possible.
 func @unable_to_update_terminator(%arg0: !torch.vtensor<[],f32>) -> !torch.vtensor<[],f32> {
     %0 = arith.constant true
-    cond_br %0, ^bb1(%arg0: !torch.vtensor<[],f32>), ^bb2(%arg0: !torch.vtensor<[],f32>)
+    cf.cond_br %0, ^bb1(%arg0: !torch.vtensor<[],f32>), ^bb2(%arg0: !torch.vtensor<[],f32>)
   ^bb1(%bbarg0: !torch.vtensor<[],f32>):
     // expected-error @+1 {{failed to legalize operation 'test.terminator'}}
     "test.terminator"() : () -> ()
@@ -107,4 +107,11 @@ func @identity$torch.int(%arg0: !torch.int) -> !torch.int {
 // CHECK:           return %[[ARG]] : f64
 func @identity$torch.float(%arg0: !torch.float) -> !torch.float {
   return %arg0 : !torch.float
+}
+
+// CHECK-LABEL:   func @identity$torch.Generator(
+// CHECK-SAME:                                   %[[VAL_0:.*]]: i64) -> i64 {
+// CHECK:           return %[[VAL_0]] : i64
+func @identity$torch.Generator(%arg0: !torch.Generator) -> !torch.Generator {
+  return %arg0 : !torch.Generator
 }

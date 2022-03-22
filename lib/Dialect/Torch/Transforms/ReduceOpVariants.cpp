@@ -18,6 +18,24 @@ using namespace mlir;
 using namespace mlir::torch;
 using namespace mlir::torch::Torch;
 
+// Create an overwrite in a manner that preserves the
+// `OverwriteTensorContentsOp` invariant that both arguments
+// must have the same shape and dtype.
+static void createOverwriteTensorContents(PatternRewriter &rewriter,
+                                          Location loc, Value overwriterTensor,
+                                          Value overwrittenTensor) {
+  Type overwriterTensorType = overwriterTensor.getType();
+  Type overwrittenTensorType = overwrittenTensor.getType()
+                                   .dyn_cast<NonValueTensorType>()
+                                   .getWithValueSemantics();
+  if (overwriterTensorType != overwrittenTensorType) {
+    overwriterTensor = rewriter.create<TensorStaticInfoCastOp>(
+        loc, overwrittenTensorType, overwriterTensor);
+  }
+  rewriter.create<OverwriteTensorContentsOp>(loc, overwriterTensor,
+                                             overwrittenTensor);
+}
+
 namespace {
 // Convert value semantic ops operating on mutable arrays to instead operate on
 // immutable tensors.
@@ -117,6 +135,48 @@ public:
 };
 } // namespace
 
+// Reduce Ops without value semantics but the corresponding without trailing
+// underscore variant doesn't exist.
+namespace {
+class ReduceNonValueSemanticOps : public RewritePattern {
+public:
+  ReduceNonValueSemanticOps(MLIRContext *context)
+      : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op->getLoc();
+    Operation *newOp;
+    if (isa<AtenUniform_Op>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenUniformOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else if (isa<AtenBernoulli_FloatOp>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenBernoulliFloatOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else if (isa<AtenBernoulli_TensorOp>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenBernoulliTensorOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else if (isa<AtenFill_ScalarOp>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenFillScalarOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else if (isa<Aten_IndexPutImpl_Op>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenIndexPutImplOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else if (isa<AtenCopy_Op>(op)) {
+      newOp = rewriter.create<ValsemVariantAtenCopyOp>(
+          loc, op->getResultTypes(), op->getOperands());
+    } else {
+      return failure();
+    }
+
+    auto tensor =
+        rewriter.create<CopyToValueTensorOp>(loc, newOp->getResult(0));
+    createOverwriteTensorContents(rewriter, loc, tensor, op->getOperand(0));
+    rewriter.replaceOp(op, op->getOperand(0));
+    return success();
+  }
+};
+} // namespace
+
 namespace {
 // Reduce the "trailing underscore inplace variant" to the value semantic
 // variant + an overwrite of the original "self" argument.
@@ -147,7 +207,8 @@ public:
     Operation *newOp = rewriter.createOperation(state);
     auto tensor =
         rewriter.create<CopyToValueTensorOp>(op->getLoc(), newOp->getResult(0));
-    rewriter.create<OverwriteTensorOp>(op->getLoc(), tensor, op->getOperand(0));
+    createOverwriteTensorContents(rewriter, op->getLoc(), tensor,
+                                  op->getOperand(0));
     rewriter.replaceOp(op, op->getOperand(0));
 
     return success();
@@ -174,9 +235,16 @@ class ReduceOpVariantsPass : public ReduceOpVariantsBase<ReduceOpVariantsPass> {
     patterns.add<ConvertToImmutableTensors>(context);
     patterns.add<ReduceTrailingUnderscoreInplaceVariant>(context);
     patterns.add(reduceNonValueTensorLiteralOpToValueTensorLiteralOp);
+    patterns.add<ReduceNonValueSemanticOps>(context);
 
     ConversionTarget target(*context);
     target.addIllegalOp<NonValueTensorLiteralOp>();
+    target.addIllegalOp<AtenUniform_Op>();
+    target.addIllegalOp<AtenBernoulli_FloatOp>();
+    target.addIllegalOp<AtenBernoulli_TensorOp>();
+    target.addIllegalOp<AtenFill_ScalarOp>();
+    target.addIllegalOp<Aten_IndexPutImpl_Op>();
+    target.addIllegalOp<AtenCopy_Op>();
     target.markUnknownOpDynamicallyLegal([](Operation *op) {
       if (op->hasTrait<Torch::OpTrait::HasValueSemantics>()) {
         auto hasValueSemantics = [](Type t) {

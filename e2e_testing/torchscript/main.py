@@ -30,7 +30,7 @@ from . import basic
 from . import vision_models
 from . import mlp
 from . import conv
-from . import batchnorm
+from . import norm_like
 from . import quantized_models
 from . import elementwise
 from . import type_promotion
@@ -39,8 +39,10 @@ from . import backprop
 from . import reduction
 from . import argmax
 from . import matmul
-from . import view
+from . import reshape_like
 from . import scalar
+from . import scalar_comparison
+from . import elementwise_comparison
 from . import squeeze
 from . import slice_like
 from . import nll_loss
@@ -49,6 +51,10 @@ from . import arange
 from . import constant_alloc
 from . import threshold
 from . import histogram_binning_calibration
+from . import table_batch_embedding
+from . import rng
+from . import cast
+from . import index_put
 
 def _get_argparse():
     config_choices = ['native_torch', 'torchscript', 'refbackend', 'tosa', 'external']

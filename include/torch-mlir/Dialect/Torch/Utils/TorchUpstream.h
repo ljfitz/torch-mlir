@@ -5,6 +5,8 @@
 // https://github.com/pytorch/pytorch/blob/master/LICENSE
 //
 //===----------------------------------------------------------------------===//
+#ifndef TORCHMLIR_DIALECT_TORCH_UPSTREAM_H
+#define TORCHMLIR_DIALECT_TORCH_UPSTREAM_H
 
 #include "mlir/Support/LLVM.h"
 
@@ -18,6 +20,10 @@
 // verbatim (modulo namespaces) from PyTorch. Notice that this file retains the
 // original PyTorch license and the code here should not be mixed with "code
 // that we [Torch-MLIR] write".
+
+// Note: As a coding convention, we should never `using` the `torch_upstream`
+// namespace. This is to ensure that at a glance from the code, it is clear
+// that we are referencing upstream types.
 
 namespace mlir {
 namespace torch {
@@ -70,6 +76,29 @@ struct ResultTypeState {
 ScalarType result_type(const ResultTypeState &in_state);
 ScalarType promote_skip_undefined(ScalarType a, ScalarType b);
 
+//===----------------------------------------------------------------------===//
+// These constants control the reduction behavior of the loss functions.
+// None, Mean and Sum corresponds to "do not reduce", "Mean of losses", and "sum
+// of losses" respectively.
+// Source:
+// https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/core/Reduction.h
+//===----------------------------------------------------------------------===//
+enum Reduction { None, Mean, Sum, END };
+
+//===----------------------------------------------------------------------===//
+// Possible values for `memory_format` argument in PyTorch ops that support it.
+// Source:
+// https://github.com/pytorch/pytorch/blob/master/c10/core/MemoryFormat.h
+//===----------------------------------------------------------------------===//
+enum MemoryFormat {
+  Contiguous,
+  Preserve,
+  ChannelsLast,
+  ChannelsLast3d
+};
+
 } // namespace torch_upstream
 } // namespace torch
 } // namespace mlir
+
+#endif // TORCHMLIR_DIALECT_TORCH_UPSTREAM_H

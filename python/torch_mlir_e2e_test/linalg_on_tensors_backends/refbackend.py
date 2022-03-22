@@ -53,6 +53,10 @@ class RefBackendInvoker:
         def consume_return_mrf64(a):
             self.result = unranked_memref_to_numpy(a, np.float64)
 
+        @ctypes.CFUNCTYPE(None, ctypes.c_bool)
+        def consume_return_i1(a):
+            self.result = a
+
         @ctypes.CFUNCTYPE(None, ctypes.c_int)
         def consume_return_i64(a):
             self.result = a
@@ -72,6 +76,22 @@ class RefBackendInvoker:
                 arg0, np.float32), unranked_memref_to_numpy(
                     arg1,
                     np.int64)
+
+        @ctypes.CFUNCTYPE(None, ctypes.POINTER(UnrankedMemRefDescriptor),
+                          ctypes.POINTER(UnrankedMemRefDescriptor))
+        def consume_return_mrf32_mrf32(arg0, arg1):
+            self.result = unranked_memref_to_numpy(
+                arg0, np.float32), unranked_memref_to_numpy(
+                    arg1,
+                    np.float32)
+
+        @ctypes.CFUNCTYPE(None, ctypes.POINTER(UnrankedMemRefDescriptor),
+                          ctypes.POINTER(UnrankedMemRefDescriptor))
+        def consume_return_mrf64_mrf64(arg0, arg1):
+            self.result = unranked_memref_to_numpy(
+                arg0, np.float64), unranked_memref_to_numpy(
+                    arg1,
+                    np.float64)
 
         @ctypes.CFUNCTYPE(None, ctypes.POINTER(UnrankedMemRefDescriptor),
                           ctypes.POINTER(UnrankedMemRefDescriptor),
@@ -97,6 +117,9 @@ class RefBackendInvoker:
         self.ee.register_runtime("refbackend_consume_func_return_mrf64",
                                  consume_return_mrf64)
 
+        self.ee.register_runtime("refbackend_consume_func_return_i1",
+                                 consume_return_i1)
+
         self.ee.register_runtime("refbackend_consume_func_return_i64",
                                  consume_return_i64)
 
@@ -109,6 +132,14 @@ class RefBackendInvoker:
         self.ee.register_runtime(
             "refbackend_consume_func_return_mrf32_mri64",
             consume_return_mrf32_mri64)
+
+        self.ee.register_runtime(
+            "refbackend_consume_func_return_mrf32_mrf32",
+            consume_return_mrf32_mrf32)
+
+        self.ee.register_runtime(
+            "refbackend_consume_func_return_mrf64_mrf64",
+            consume_return_mrf64_mrf64)
 
         self.ee.register_runtime(
             "refbackend_consume_func_return_mrf32_mrf32_mrf32",
@@ -133,13 +164,14 @@ class RefBackendInvoker:
 
 
 LOWERING_PIPELINE = ",".join([
+    "builtin.func(refback-generalize-tensor-pad)",
     # Bufferize.
-    "tensor-constant-bufferize",
     "builtin.func(scf-bufferize)",
+    "builtin.func(tm-tensor-bufferize)",
     "builtin.func(linalg-bufferize)",
-    "builtin.func(std-bufferize)",
-    "builtin.func(tensor-bufferize)",
     "func-bufferize",
+    "arith-bufferize",
+    "builtin.func(tensor-bufferize)",
     "builtin.func(finalizing-bufferize)",
     # Munge to make it ExecutionEngine compatible.
     # Specifically, we rewrite calling convention boundaries to be in terms
@@ -148,15 +180,23 @@ LOWERING_PIPELINE = ",".join([
     # returns void at the C level -- we get the return value by providing the
     # callback).
     "refback-munge-calling-conventions",
+    # Insert global variable and instruction sequence for getting the next
+    # global seed used in stateful rng.
+    "refback-insert-rng-globals",
     # Lower to LLVM
+    "builtin.func(tm-tensor-to-loops)",
+    "builtin.func(refback-munge-memref-copy)",
     "builtin.func(convert-linalg-to-loops)",
     "builtin.func(lower-affine)",
-    "builtin.func(convert-scf-to-std)",
+    "convert-scf-to-cf",
     "builtin.func(refback-expand-ops-for-llvm)",
     "builtin.func(arith-expand)",
     "builtin.func(convert-math-to-llvm)",
+    "convert-linalg-to-llvm",
     "convert-memref-to-llvm",
-    "convert-std-to-llvm",
+    "builtin.func(convert-arith-to-llvm)",
+    "convert-func-to-llvm",
+    "convert-cf-to-llvm",
     "reconcile-unrealized-casts",
 ])
 
