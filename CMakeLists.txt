@@ -36,9 +36,10 @@ macro(torch_mlir_add_llvm_external_project name identifier location)
   set(LLVM_EXTERNAL_PROJECTS ${LLVM_EXTERNAL_PROJECTS} CACHE STRING "" FORCE)
 endmacro()
 
-set(TORCH_MLIR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(TORCH_MLIR_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-message(STATUS "Building torch-mlir project at ${TORCH_MLIR_SOURCE_DIR} (into ${TORCH_MLIR_BINARY_DIR})")
+torch_mlir_add_llvm_external_project(
+  torch-mlir-dialects
+  TORCH_MLIR_DIALECTS
+  ${CMAKE_CURRENT_SOURCE_DIR}/external/llvm-external-projects/torch-mlir-dialects)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Out-of-tree build
@@ -46,7 +47,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   #-------------------------------------------------------------------------------
   # MLIR/LLVM Configuration
   #-------------------------------------------------------------------------------
-  set(LLVM_OUT_OF_TREE_BUILD TRUE)
 
   find_package(MLIR REQUIRED CONFIG)
   message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
@@ -83,11 +83,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   add_subdirectory(external/llvm-external-projects/torch-mlir-dialects)
 else()
   # In-tree build with LLVM_EXTERNAL_PROJECTS=torch-mlir
-  torch_mlir_add_llvm_external_project(
-    torch-mlir-dialects
-    TORCH_MLIR_DIALECTS
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/llvm-external-projects/torch-mlir-dialects)
-
   # FIXME: This should really be inherited from the LLVM tree.  In particular,
   # it's going to change when cross-compiling.
   set(MLIR_TABLEGEN_EXE mlir-tblgen)
@@ -102,6 +97,10 @@ else()
   set(MLIR_INCLUDE_DIRS "${MLIR_INCLUDE_DIR};${MLIR_GENERATED_INCLUDE_DIR}")
 endif()
 
+set(TORCH_MLIR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(TORCH_MLIR_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "Building torch-mlir project at ${TORCH_MLIR_SOURCE_DIR} (into ${TORCH_MLIR_BINARY_DIR})")
+
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -109,8 +108,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 
 function(torch_mlir_target_includes target)
   set(_dirs
-    $<BUILD_INTERFACE:${MLIR_INCLUDE_DIR}>
-    $<BUILD_INTERFACE:${MLIR_GENERATED_INCLUDE_DIR}>
+    $<BUILD_INTERFACE:${MLIR_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${TORCH_MLIR_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${TORCH_MLIR_BINARY_DIR}/include>
   )
