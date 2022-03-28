@@ -22,6 +22,16 @@ bool Torch::isValidDim(int64_t dim, int64_t inputRank) {
   return dim >= 0 && dim < inputRank;
 }
 
+llvm::Optional<int64_t> Torch::getMatchedListDim(Value v, int64_t rank) {
+  int64_t dim;
+  if (!matchPattern(v, m_TorchConstantInt(&dim)))
+    return llvm::None;
+  dim = toPositiveDim(dim, rank);
+  if (!isValidDim(dim, rank))
+    return llvm::None;
+  return dim;
+}
+
 bool Torch::getListConstructElements(Value v, SmallVectorImpl<Value> &elems) {
   auto listConstruct = v.getDefiningOp<PrimListConstructOp>();
   if (!listConstruct)
