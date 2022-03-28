@@ -32,25 +32,25 @@ def SliceModule_basic(module, tu: TestUtils):
 
 # ==============================================================================
 
-class SliceOutOfUpperBoundIndexModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    @export
-    @annotate_args([
-        None,
-        ([-1, -1, -1], torch.float32, True),
-    ])
-    def forward(self, x):
-        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
-        result =  x[:8, :5, 8:]
-        cat_tensor = torch.ones((6,4,1), dtype=torch.float32)
-        return torch.cat((result,cat_tensor), dim=2)
-        
-
-@register_test_case(module_factory=lambda: SliceOutOfUpperBoundIndexModule())
-def SliceOutOfUpperBoundIndexModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(6,4,7))
+#class SliceOutOfUpperBoundIndexModule(torch.nn.Module):
+#    def __init__(self):
+#        super().__init__()
+#
+#    @export
+#    @annotate_args([
+#        None,
+#        ([-1, -1, -1], torch.float32, True),
+#    ])
+#    def forward(self, x):
+#        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
+#        result =  x[:8, :5, 8:]
+#        cat_tensor = torch.ones((6,4,1), dtype=torch.float32)
+#        return torch.cat((result,cat_tensor), dim=2)
+#        
+#
+#@register_test_case(module_factory=lambda: SliceOutOfUpperBoundIndexModule())
+#def SliceOutOfUpperBoundIndexModule_basic(module, tu: TestUtils):
+#    module.forward(tu.rand(6,4,7))
 
 # ==============================================================================
 
@@ -93,48 +93,48 @@ def SliceOutOfLowerBoundStartIndexModule_basic(module, tu: TestUtils):
 # ==============================================================================
 
 
-class SliceEndSleStartModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    @export
-    @annotate_args([
-        None,
-        ([-1, -1, -1], torch.float32, True),
-    ])
-    def forward(self, x):
-        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
-        result = x[:, 4:3, :]
-        cat_tensor = torch.ones((6,1,7), dtype=torch.float32)
-        return torch.cat((result, cat_tensor), dim=1)
-
-
-@register_test_case(module_factory=lambda: SliceEndSleStartModule())
-def SliceEndSleStartModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(6,4,7))
+#class SliceEndSleStartModule(torch.nn.Module):
+#    def __init__(self):
+#        super().__init__()
+#
+#    @export
+#    @annotate_args([
+#        None,
+#        ([-1, -1, -1], torch.float32, True),
+#    ])
+#    def forward(self, x):
+#        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
+#        result = x[:, 4:3, :]
+#        cat_tensor = torch.ones((6,1,7), dtype=torch.float32)
+#        return torch.cat((result, cat_tensor), dim=1)
+#
+#
+#@register_test_case(module_factory=lambda: SliceEndSleStartModule())
+#def SliceEndSleStartModule_basic(module, tu: TestUtils):
+#    module.forward(tu.rand(6,4,7))
 
 # ==============================================================================
 
 
-class SliceStartEqEndModule(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    @export
-    @annotate_args([
-        None,
-        ([-1, -1, -1], torch.float32, True),
-    ])
-    def forward(self, x):
-        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
-        result = x[5:5, :, :]
-        cat_tensor = torch.ones((1,4,7), dtype=torch.float32)
-        return torch.cat((result, cat_tensor), dim=0)
-
-
-@register_test_case(module_factory=lambda: SliceStartEqEndModule())
-def SliceStartEqEndModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(6,4,7))
+#class SliceStartEqEndModule(torch.nn.Module):
+#    def __init__(self):
+#        super().__init__()
+#
+#    @export
+#    @annotate_args([
+#        None,
+#        ([-1, -1, -1], torch.float32, True),
+#    ])
+#    def forward(self, x):
+#        # TODO: remove hacky cat tensor once refbackend supports 0 size dim
+#        result = x[5:5, :, :]
+#        cat_tensor = torch.ones((1,4,7), dtype=torch.float32)
+#        return torch.cat((result, cat_tensor), dim=0)
+#
+#
+#@register_test_case(module_factory=lambda: SliceStartEqEndModule())
+#def SliceStartEqEndModule_basic(module, tu: TestUtils):
+#    module.forward(tu.rand(6,4,7))
 
 # ==============================================================================
 

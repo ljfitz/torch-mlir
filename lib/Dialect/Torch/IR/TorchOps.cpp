@@ -694,8 +694,8 @@ OpFoldResult AtenLenTOp::fold(ArrayRef<Attribute> operands) {
   if (auto listConstruct =
           getOperand().getDefiningOp<Torch::PrimListConstructOp>()) {
     if (!isListPotentiallyMutated(
-            listConstruct, getOperation(),
-            ([](Operation *) -> bool { return false; }))) {
+            listConstruct /*, getOperation(),
+            ([](Operation *) -> bool { return false; })*/)) {
       return IntegerAttr::get(IntegerType::get(getContext(), 64),
                               listConstruct.getNumOperands());
     }
