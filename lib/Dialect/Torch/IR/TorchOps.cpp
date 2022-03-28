@@ -64,6 +64,36 @@ Value mlir::torch::Torch::copyTensorToType(OpBuilder &builder, Location loc,
   return tensor;
 }
 
+bool mlir::torch::Torch::isListPotentiallyMutated(
+    Value list, Operation *usingOp,
+    std::function<bool(Operation *)> safeOpFilter) {
+  assert(list.getType().isa<Torch::ListType>());
+  Block *block = list.getParentBlock();
+
+  if (block == usingOp->getBlock()) {
+    // Perform a simple analysis to check there is no mutating operation before
+    // `usingOp` in `block`. Only users of `list` in `block` need to be checked
+    // (in execution order).
+    auto allUsers = llvm::to_vector<6>(llvm::make_filter_range(
+        list.getDefiningOp()->getUsers(),
+        [block](Operation *op) { return op->getBlock() == block; }));
+    llvm::sort(allUsers);
+
+    for (auto user : allUsers) {
+      if (user == usingOp)
+        return false;
+      if (safeOpFilter(user))
+        continue;
+      if (potentiallyMutatesListOperands(user))
+        return true;
+    }
+  }
+
+  // The usingOp is not in the same block as the list is defined - only a simple
+  // context-insensitive test for potential changes to `list` is performed.
+  return isListPotentiallyMutated(list);
+}
+
 bool mlir::torch::Torch::isListPotentiallyMutated(Value list) {
   assert(list.getType().isa<Torch::ListType>());
   return llvm::any_of(list.getUsers(), potentiallyMutatesListOperands);
@@ -663,7 +693,9 @@ OpFoldResult AtenLenTOp::fold(ArrayRef<Attribute> operands) {
   // `len([1,1,1])` -> `3`, if it is not mutated.
   if (auto listConstruct =
           getOperand().getDefiningOp<Torch::PrimListConstructOp>()) {
-    if (!isListPotentiallyMutated(listConstruct)) {
+    if (!isListPotentiallyMutated(
+            listConstruct, getOperation(),
+            ([](Operation *) -> bool { return false; }))) {
       return IntegerAttr::get(IntegerType::get(getContext(), 64),
                               listConstruct.getNumOperands());
     }
@@ -725,18 +757,14 @@ OpFoldResult AtenSizeIntOp::fold(ArrayRef<Attribute> operands) {
   if (!type || !type.hasSizes())
     return nullptr;
 
-  int64_t inputRank = type.getSizes().size();
-  int64_t dim;
-  if (!matchPattern(this->dim(), m_TorchConstantInt(&dim)))
+  llvm::Optional<int64_t> dimOpt =
+      getMatchedListDim(this->dim(), type.getSizes().size());
+  if (!dimOpt)
     return nullptr;
-  dim = toPositiveDim(dim, inputRank);
-  if (!isValidDim(dim, inputRank))
-    return nullptr;
-
-  if (type.getSizes()[dim] == kUnknownSize)
+  if (type.getSizes()[*dimOpt] == kUnknownSize)
     return nullptr;
   return IntegerAttr::get(IntegerType::get(getContext(), 64),
-                          type.getSizes()[dim]);
+                          type.getSizes()[*dimOpt]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1219,22 +1247,31 @@ void Aten__Getitem__TOp::getCanonicalizationPatterns(
     RewritePatternSet &patterns, MLIRContext *context) {
   patterns.add(+[](Aten__Getitem__TOp op, PatternRewriter &rewriter) {
     auto torchList = op.getOperand(0);
-    if (isListPotentiallyMutated(torchList))
-      return failure();
-
     auto listConstruct = torchList.getDefiningOp<Torch::PrimListConstructOp>();
     if (!listConstruct)
       return failure();
 
     // Get the index, but be careful because it might be statically invalid.
-    int64_t index;
-    if (!matchPattern(op.getOperand(1), m_TorchConstantInt(&index)))
-      return failure();
-    int64_t positiveDim = toPositiveDim(index, listConstruct.getNumOperands());
-    if (!isValidDim(positiveDim, listConstruct.getNumOperands()))
+    llvm::Optional<int64_t> indexOpt =
+        getMatchedListDim(op.getOperand(1), listConstruct.getNumOperands());
+    if (!indexOpt)
       return rewriter.notifyMatchFailure(op, "statically invalid index");
 
-    rewriter.replaceOp(op, {listConstruct.getOperand(positiveDim)});
+    auto replacesDifferentItem = [indexGet = *indexOpt,
+                                  &listConstruct](Operation *op) -> bool {
+      auto setOp = dyn_cast<Aten_SetItemTOp>(op);
+      if (!setOp)
+        return false;
+      llvm::Optional<int64_t> indexOpt =
+          getMatchedListDim(op->getOperand(1), listConstruct.getNumOperands());
+      if (!indexOpt)
+        return false;
+      return *indexOpt != indexGet;
+    };
+    if (isListPotentiallyMutated(torchList, op, replacesDifferentItem))
+      return failure();
+
+    rewriter.replaceOp(op, {listConstruct.getOperand(*indexOpt)});
     return success();
   });
   patterns.add(+[](Aten__Getitem__TOp op, PatternRewriter &rewriter) {

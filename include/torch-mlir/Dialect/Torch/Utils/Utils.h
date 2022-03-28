@@ -21,6 +21,10 @@ namespace Torch {
 int64_t toPositiveDim(int64_t dim, int64_t inputRank);
 bool isValidDim(int64_t dim, int64_t inputRank);
 bool getListConstructElements(Value v, SmallVectorImpl<Value> &elems);
+/// Returns the dimension indicated by `v` for a list of given `rank`.
+/// Negative values are adjusted with `toPositiveDim`. `None` is returned
+/// if the value fails `isValidDim`.
+llvm::Optional<int64_t> getMatchedListDim(Value v, int64_t rank);
 torch_upstream::ScalarType getScalarTypeForType(Type type);
 // Helper to convert a tensor to a specific scalar type.
 Value convertTensorToDtype(PatternRewriter &rewriter, Location loc, Value input,

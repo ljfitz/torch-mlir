@@ -190,6 +190,13 @@ Value copyTensorToType(OpBuilder &builder, Location loc, BaseTensorType newType,
 /// Returns true if `list` is potentially mutated.
 bool isListPotentiallyMutated(Value list);
 
+/// Returns true if `list` is potentially mutated before `usingOp` is evaluated
+/// in a way that would change the result of `usingOp`.
+/// If `safeOpFilter` returns `true` then an operation is known to have no
+/// effect on the result of `usingOp`.
+bool isListPotentiallyMutated(Value list, Operation *usingOp,
+                              std::function<bool(Operation *)> safeOpFilter);
+
 /// Returns true if `op` might mutate any lists that it has as operands.
 ///
 /// A return value of true does not guarantee that the operation mutates

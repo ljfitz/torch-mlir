@@ -523,6 +523,16 @@ func @torch.aten.len.t$no_fold_list_mutated() -> !torch.int {
   return %2 : !torch.int
 }
 
+// CHECK-LABEL: func @torch.aten.len.t$fold_list_mutated_after()
+// CHECK:           return %int0
+func @torch.aten.len.t$fold_list_mutated_after() -> !torch.int {
+  %int4 = torch.constant.int 4
+  %0 = torch.prim.ListConstruct  : () -> !torch.list<int>
+  %2 = torch.aten.len.t %0 : !torch.list<int> -> !torch.int
+  %1 = torch.aten.append.t %0, %int4 : !torch.list<int>, !torch.int -> !torch.list<int>
+  return %2 : !torch.int
+}
+
 // CHECK-LABEL:   func @torch.aten.__getitem__.t(
 // CHECK:           %[[C5:.*]] = torch.constant.int 5
 // CHECK:           return %[[C5]] : !torch.int
@@ -592,6 +602,32 @@ func @torch.aten.__getitem__.t$invalid_index() -> !torch.int {
   %0 = torch.prim.ListConstruct %int7, %int8 : (!torch.int, !torch.int) -> !torch.list<int>
   // CHECK: torch.aten.__getitem__.t
   %1 = torch.aten.__getitem__.t %0, %int-1 : !torch.list<int>, !torch.int -> !torch.int
+  return %1 : !torch.int
+}
+
+// CHECK-LABEL:   func @torch.aten.__getitem__.t$set_comes_after() -> !torch.int {
+// CHECK:           return %int7
+func @torch.aten.__getitem__.t$set_comes_after() -> !torch.int {
+  %int7 = torch.constant.int 7
+  %int8 = torch.constant.int 8
+  %int0 = torch.constant.int 0
+  %0 = torch.prim.ListConstruct %int7, %int8 : (!torch.int, !torch.int) -> !torch.list<int>
+  %1 = torch.aten.__getitem__.t %0, %int0 : !torch.list<int>, !torch.int -> !torch.int
+  // Clobber the same element of the list after we get it.
+  %2 = torch.aten._set_item.t %0, %int0, %int7 : !torch.list<int>, !torch.int, !torch.int -> !torch.list<int>
+  return %1 : !torch.int
+}
+
+// CHECK-LABEL:   func @torch.aten.__getitem__.t$set_comes_before() -> !torch.int {
+func @torch.aten.__getitem__.t$set_comes_before() -> !torch.int {
+  %int7 = torch.constant.int 7
+  %int8 = torch.constant.int 8
+  %int0 = torch.constant.int 0
+  %0 = torch.prim.ListConstruct %int7, %int8 : (!torch.int, !torch.int) -> !torch.list<int>
+  // Clobber the same element of the list before we get it.
+  %2 = torch.aten._set_item.t %0, %int0, %int7 : !torch.list<int>, !torch.int, !torch.int -> !torch.list<int>
+  // CHECK: torch.aten.__getitem__.t
+  %1 = torch.aten.__getitem__.t %0, %int0 : !torch.list<int>, !torch.int -> !torch.int
   return %1 : !torch.int
 }
 
