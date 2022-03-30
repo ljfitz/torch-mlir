@@ -686,6 +686,7 @@ def Torch_DerefineOp : Torch_Op<"derefine", [
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def Torch_OperatorOp : Torch_Op<"operator", [
@@ -994,6 +995,23 @@ def Torch_ValsemVariantAtenBernoulliTensorOp: Torch_Op<"valsem.aten.bernoulli.Te
     AnyTorchTensorType:$result
   );
   let assemblyFormat = "$self `,` $p `,` $generator attr-dict `:` qualified(type($self)) `,` qualified(type($p)) `,` qualified(type($generator)) `->` qualified(type($result))";
+}
+
+// The corresponding without underscore variant for `torch.aten.zero_`
+// doesn't exist in the pytorch ops registry. Add it here.
+def Torch_ValsemVariantAtenZeroOp: Torch_Op<"valsem.aten.zero", [
+    AllowsTypeRefinement,
+    HasValueSemantics,
+    ReadOnly
+  ]> {
+  let summary = "`zero op : (Tensor) -> (Tensor)`";
+  let arguments = (ins
+    AnyTorchTensorType:$self
+  );
+  let results = (outs
+    AnyTorchTensorType:$result
+  );
+  let assemblyFormat = "$self attr-dict `:` qualified(type($self)) `->` qualified(type($result))";
 }
 
 // The corresponding without underscore variant for `torch.aten.fill_.Scalar`

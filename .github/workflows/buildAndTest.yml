@@ -10,6 +10,9 @@ on:
       release_id:
         description: 'Release id to upload artifacts to'
         default: ''
+      python_package_version:
+        description: 'Version to use for creating the Python package'
+        default: ''
 
 jobs:
   build:
@@ -26,10 +29,10 @@ jobs:
         submodules: 'true'
     - name: Install MLIR Python depends
       run: |
-        python -m pip install -r $GITHUB_WORKSPACE/external/llvm-project/mlir/python/requirements.txt
+        python -m pip install -r $GITHUB_WORKSPACE/externals/llvm-project/mlir/python/requirements.txt
     - name: Install PyTorch nightly depends
       run: |
-        python -m pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        python -m pip install -r requirements.txt
     - name: Install Ninja
       uses: llvm/actions/install-ninja@94577ddd7890c474f5304e8e9a58202c24c7a37b
     - name: Get Submodule Hash
@@ -45,7 +48,7 @@ jobs:
         cd $GITHUB_WORKSPACE
         mkdir build
         cd build
-        cmake $GITHUB_WORKSPACE/external/llvm-project/llvm -GNinja \
+        cmake $GITHUB_WORKSPACE/externals/llvm-project/llvm -GNinja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_LINKER=lld \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
@@ -79,6 +82,7 @@ jobs:
         python -m pip install wheel
         TORCH_MLIR_CMAKE_BUILD_DIR="$GITHUB_WORKSPACE/build" \
           TORCH_MLIR_CMAKE_BUILD_DIR_ALREADY_BUILT=1 \
+          TORCH_MLIR_PYTHON_PACKAGE_VERSION="${{ github.event.inputs.python_package_version }}" \
           ./build_tools/build_python_wheels.sh
 
     # If we were given a release_id, then upload the package we just built

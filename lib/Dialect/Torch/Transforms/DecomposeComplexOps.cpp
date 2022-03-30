@@ -222,6 +222,22 @@ public:
 } // namespace
 
 namespace {
+class DecomposeValsemVariantAtenZeroOp
+    : public OpRewritePattern<ValsemVariantAtenZeroOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ValsemVariantAtenZeroOp op,
+                                PatternRewriter &rewriter) const override {
+    Value zero = rewriter.create<ConstantIntOp>(op.getLoc(),
+                                                rewriter.getI64IntegerAttr(0));
+    rewriter.replaceOpWithNewOp<ValsemVariantAtenFillScalarOp>(op, op.getType(),
+                                                               op.self(), zero);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 class DecomposeAtenReshapeOp : public OpRewritePattern<AtenReshapeOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
@@ -675,6 +691,60 @@ public:
     }
     rewriter.replaceOpWithNewOp<AtenBroadcastToOp>(op, op.getType(), op.self(),
                                                    op.size());
+    return success();
+  }
+};
+} // namespace
+
+// Decompose aten.where.Scalar into aten.where.self op.
+namespace {
+class DecomposeAtenWhereScalarOp : public OpRewritePattern<AtenWhereScalarOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenWhereScalarOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto resType = op.getType().cast<BaseTensorType>();
+    Value selfTensor = createRank0Tensor(rewriter, loc, resType, op.self());
+    Value otherTensor = createRank0Tensor(rewriter, loc, resType, op.other());
+    rewriter.replaceOpWithNewOp<AtenWhereSelfOp>(op, resType, op.condition(),
+                                                 selfTensor, otherTensor);
+    return success();
+  }
+};
+} // namespace
+
+// Decompose aten.where.ScalarOther into aten.where.self op.
+namespace {
+class DecomposeAtenWhereScalarOtherOp
+    : public OpRewritePattern<AtenWhereScalarOtherOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenWhereScalarOtherOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto resType = op.getType().cast<BaseTensorType>();
+    Value otherTensor = createRank0Tensor(rewriter, loc, resType, op.other());
+    rewriter.replaceOpWithNewOp<AtenWhereSelfOp>(op, resType, op.condition(),
+                                                 op.self(), otherTensor);
+    return success();
+  }
+};
+} // namespace
+
+// Decompose aten.where.ScalarSelf into aten.where.self op.
+namespace {
+class DecomposeAtenWhereScalarSelfOp
+    : public OpRewritePattern<AtenWhereScalarSelfOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenWhereScalarSelfOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto resType = op.getType().cast<BaseTensorType>();
+    Value selfTensor = createRank0Tensor(rewriter, loc, resType, op.self());
+    rewriter.replaceOpWithNewOp<AtenWhereSelfOp>(op, resType, op.condition(),
+                                                 selfTensor, op.other());
     return success();
   }
 };
@@ -1402,6 +1472,23 @@ class DecomposeAten_UnsafeViewOp : public OpRewritePattern<Aten_UnsafeViewOp> {
 };
 } // namespace
 
+// In PyTorch, _reshape_alias just uses an already computed stride.
+// See
+// https://github.com/pytorch/pytorch/blob/d8c31a819d4a65e732b5901e3b994e1869851f1a/aten/src/ATen/native/TensorShape.cpp#L1153
+// Note that this is the same decomposition as in AOTAutograd
+// https://github.com/pytorch/functorch/blob/a3042d94e616d4143813668b1372d9d4545be14e/functorch/_src/aot_autograd.py#L104
+namespace {
+class DecomposeAten_ReshapeAliasOp : public OpRewritePattern<Aten_ReshapeAliasOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(Aten_ReshapeAliasOp op,
+                                PatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<AtenViewOp>(op, op.getType(), op.self(),
+                                            op.size());
+    return success();
+  }
+};
+} // namespace
+
 namespace {
 // Decompose constant tensor like ops.
 template <typename OpTy, typename NewOpTy>
@@ -1409,8 +1496,15 @@ class DecomposeConstantTensorNewLikeOp : public OpRewritePattern<OpTy> {
   using OpRewritePattern<OpTy>::OpRewritePattern;
   LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<NewOpTy>(op, op.getType(), op.size(),
-                                         op.dtype(), op.layout(), op.device(),
+    Value dtype = op.dtype();
+    if (dtype.getType().isa<Torch::NoneType>()) {
+      BaseTensorType tensorType =
+          op.self().getType().template cast<BaseTensorType>();
+      dtype =
+          getDtypeIntValueForType(rewriter, op.getLoc(), tensorType.getDtype());
+    }
+    rewriter.replaceOpWithNewOp<NewOpTy>(op, op.getType(), op.size(), dtype,
+                                         op.layout(), op.device(),
                                          op.pin_memory());
     return success();
   }
@@ -1504,6 +1598,27 @@ public:
 } // namespace
 
 namespace {
+// Decompose `aten.new_empty` op into `aten.empty.memory_format` op.
+class DecomposeAtenNewEmptyOp : public OpRewritePattern<AtenNewEmptyOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenNewEmptyOp op,
+                                PatternRewriter &rewriter) const override {
+    Value noneVal = rewriter.create<ConstantNoneOp>(op.getLoc());
+    Value dtype = op.dtype();
+    if (dtype.getType().isa<Torch::NoneType>()) {
+      BaseTensorType tensorType = op.self().getType().cast<BaseTensorType>();
+      dtype =
+          getDtypeIntValueForType(rewriter, op.getLoc(), tensorType.getDtype());
+    }
+    rewriter.replaceOpWithNewOp<AtenEmptyMemoryFormatOp>(
+        op, op.getType(), op.size(), dtype, op.layout(), op.device(),
+        op.pin_memory(), /*memory_format=*/noneVal);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 class DecomposeComplexOpsPass
     : public DecomposeComplexOpsBase<DecomposeComplexOpsPass> {
   void runOnOperation() override {
@@ -1530,6 +1645,12 @@ class DecomposeComplexOpsPass
     target.addIllegalOp<AtenZerosLikeOp>();
     patterns.add<DecomposeAtenExpandOp>(context);
     target.addIllegalOp<AtenExpandOp>();
+    patterns.add<DecomposeAtenWhereScalarOp>(context);
+    target.addIllegalOp<AtenWhereScalarOp>();
+    patterns.add<DecomposeAtenWhereScalarOtherOp>(context);
+    target.addIllegalOp<AtenWhereScalarOtherOp>();
+    patterns.add<DecomposeAtenWhereScalarSelfOp>(context);
+    target.addIllegalOp<AtenWhereScalarSelfOp>();
     patterns.add<DecomposeAtenSizeOp>(context);
     target.addIllegalOp<AtenSizeOp>();
     patterns.add<DecomposeAtenReshapeOp>(context);
@@ -1580,12 +1701,16 @@ class DecomposeComplexOpsPass
     target.addIllegalOp<AtenStdOp>();
     patterns.add<DecomposeAten_UnsafeViewOp>(context);
     target.addIllegalOp<Aten_UnsafeViewOp>();
+    patterns.add<DecomposeAten_ReshapeAliasOp>(context);
+    target.addIllegalOp<Aten_ReshapeAliasOp>();
     patterns.add<DecomposeAtenBernoulliOp>(context);
     target.addIllegalOp<AtenBernoulliOp>();
     patterns.add<DecomposeValsemVariantAtenBernoulliFloatOp>(context);
     target.addIllegalOp<ValsemVariantAtenBernoulliFloatOp>();
     patterns.add<DecomposeValsemVariantAtenBernoulliTensorOp>(context);
     target.addIllegalOp<ValsemVariantAtenBernoulliTensorOp>();
+    patterns.add<DecomposeValsemVariantAtenZeroOp>(context);
+    target.addIllegalOp<ValsemVariantAtenZeroOp>();
     patterns.add<DecomposeAtenRandLikeOp>(context);
     target.addIllegalOp<AtenRandLikeOp>();
     patterns.add<DecomposeAtenHardsigmoidOp>(context);
@@ -1614,6 +1739,8 @@ class DecomposeComplexOpsPass
     target.addIllegalOp<Aten_ToCopyOp>();
     patterns.add<DecomposeAtenDropoutOp>(context);
     target.addIllegalOp<AtenDropoutOp>();
+    target.addIllegalOp<AtenNewEmptyOp>();
+    patterns.add<DecomposeAtenNewEmptyOp>(context);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns)))) {

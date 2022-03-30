@@ -303,6 +303,15 @@ def aten〇hardswish(self: List[int]) -> List[int]:
 def aten〇silu(self: List[int]) -> List[int]:
     return upstream_shape_helpers.unary(self)
 
+def aten〇exp(self: List[int]) -> List[int]:
+    return upstream_shape_helpers.unary(self)
+
+def aten〇sin(self: List[int]) -> List[int]:
+    return upstream_shape_helpers.unary(self)
+
+def aten〇cos(self: List[int]) -> List[int]:
+    return upstream_shape_helpers.unary(self)
+
 def aten〇hardtanh(self: List[int], min_val: float = -1, max_val: float = 1) -> List[int]:
     return upstream_shape_helpers.unary(self)
 
@@ -542,6 +551,9 @@ def aten〇view(self: List[int], size: List[int]) -> List[int]:
 def aten〇reshape(self: List[int], shape: List[int]) -> List[int]:
     return upstream_shape_helpers.view(self, shape)
 
+def aten〇_reshape_alias(self: List[int], size: List[int], stride: List[int]) -> List[int]:
+    return upstream_shape_helpers.view(self, size)
+
 def aten〇_unsafe_view(self: List[int], size: List[int]) -> List[int]:
     return size
 
@@ -593,8 +605,15 @@ def aten〇new_zeros(self: List[int], size: List[int], dtype: Optional[int] = No
 def aten〇new_ones(self: List[int], size: List[int], dtype: Optional[int] = None, layout: Optional[int] = None, device: Optional[device] = None, pin_memory: Optional[bool] = None) -> List[int]:
     return size
 
+def aten〇new_empty(self: List[int], size: List[int], dtype: Optional[int] = None, layout: Optional[int] = None, device: Optional[device] = None, pin_memory: Optional[bool] = None) -> List[int]:
+    return size
+
 def aten〇_to_copy(self: List[int], dtype: Optional[int] = None, layout: Optional[int] = None, device: Optional[device] = None, pin_memory: Optional[bool] = None, non_blocking: bool = False, memory_format: Optional[int] = None) -> List[int]:
     return upstream_shape_helpers.unary(self)
+
+@not_present_in_registry
+def aten〇zero(self: List[int]) -> List[int]:
+    return self
 
 @not_present_in_registry
 def aten〇fill〇Scalar(self: List[int], value: float) -> List[int]:
@@ -707,6 +726,15 @@ def aten〇_shape_as_tensor(self: List[int]) -> List[int]:
 
 def aten〇where〇self(condition: List[int], self: List[int], other: List[int]) -> List[int]:
     return upstream_shape_helpers.broadcast(condition, upstream_shape_helpers.broadcast(self, other))
+
+def aten〇where〇Scalar(condition: List[int], self: float, other: float) -> List[int]:
+    return upstream_shape_helpers.unary(condition)
+
+def aten〇where〇ScalarOther(condition: List[int], self: List[int], other: float) -> List[int]:
+    return upstream_shape_helpers.broadcast(condition, self)
+
+def aten〇where〇ScalarSelf(condition: List[int], self: float, other: List[int]) -> List[int]:
+    return upstream_shape_helpers.broadcast(condition, other)
 
 def aten〇lerp〇Tensor(self: List[int], end: List[int], weight: List[int]) -> List[int]:
     return upstream_shape_helpers.broadcast(self, upstream_shape_helpers.broadcast(end, weight))

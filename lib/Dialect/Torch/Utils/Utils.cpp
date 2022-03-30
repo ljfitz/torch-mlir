@@ -22,6 +22,17 @@ bool Torch::isValidDim(int64_t dim, int64_t inputRank) {
   return dim >= 0 && dim < inputRank;
 }
 
+llvm::Optional<int64_t>
+Torch::matchLegalConstantIndexIntoListOfSize(Value v, int64_t length) {
+  int64_t dim;
+  if (!matchPattern(v, m_TorchConstantInt(&dim)))
+    return llvm::None;
+  dim = toPositiveDim(dim, length);
+  if (!isValidDim(dim, length))
+    return llvm::None;
+  return dim;
+}
+
 bool Torch::getListConstructElements(Value v, SmallVectorImpl<Value> &elems) {
   auto listConstruct = v.getDefiningOp<PrimListConstructOp>();
   if (!listConstruct)
@@ -44,7 +55,26 @@ torch_upstream::ScalarType Torch::getScalarTypeForType(Type type) {
   llvm::report_fatal_error("unhandled type for getScalarTypeForType");
 }
 
-static Value getDtypeIntValueForType(PatternRewriter &rewriter, Location loc,
+Type Torch::getTypeForScalarType(
+    MLIRContext *context, torch_upstream::ScalarType dtypeInt,
+    mlir::IntegerType::SignednessSemantics signedness) {
+  switch (dtypeInt) {
+  case torch_upstream::ScalarType::Float:
+    return Float32Type::get(context);
+  case torch_upstream::ScalarType::Double:
+    return Float64Type::get(context);
+  case torch_upstream::ScalarType::Long:
+    return IntegerType::get(context, 64, signedness);
+  case torch_upstream::ScalarType::Int:
+    return IntegerType::get(context, 32, signedness);
+  case torch_upstream::ScalarType::Bool:
+    return IntegerType::get(context, 1);
+  default:
+    return Type();
+  }
+}
+
+Value Torch::getDtypeIntValueForType(PatternRewriter &rewriter, Location loc,
                                      Type dtype) {
   int intType = (int)getScalarTypeForType(dtype);
   return rewriter.create<ConstantIntOp>(loc,
