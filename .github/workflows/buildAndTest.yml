@@ -37,7 +37,7 @@ jobs:
       run: echo "::set-output name=hash::$(md5sum $(git submodule status))"
       shell: bash
     - name: Ccache for C++ compilation
-      uses: hendrikmuhs/ccache-action@940a79df1711f4d50b87e19ddf3b0a3c182abe68
+      uses: hendrikmuhs/ccache-action@578e14bc3f06099346125f52ed0008433eccbedf
       with:
         key: ${{ runner.os }}-clangreleaseasserts-${{ steps.get-submodule-hash.outputs.hash }}
     - name: Build and Test torch-mlir (Assert)
