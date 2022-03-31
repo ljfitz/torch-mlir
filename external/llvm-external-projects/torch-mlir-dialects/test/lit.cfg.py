@@ -60,7 +60,7 @@ config.standalone_tools_dir = os.path.join(config.torch_mlir_dialects_obj_root, 
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-tool_dirs = [os.path.join(config.torch_mlir_obj_root, 'bin'), config.llvm_tools_dir]
+tool_dirs = [config.torch_mlir_dialects_tools_dir, config.llvm_tools_dir]
 tools = [
     "torch-mlir-dialects-opt",
     ToolSubst('%PYTHON', config.python_executable, unresolved='ignore'),
