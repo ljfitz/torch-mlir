@@ -15,8 +15,8 @@ on:
         default: ''
 
 jobs:
-  build:
-    name: Build and Test (Release Asserts)
+  setup-build:
+    name: Setup build
     runs-on: ubuntu-20.04
     steps:
     - name: Set up Python
@@ -43,6 +43,12 @@ jobs:
       uses: hendrikmuhs/ccache-action@4687d037e4d7cf725512d9b819137a3af34d39b3
       with:
         key: ${{ runner.os }}-clangreleaseasserts-${{ steps.get-submodule-hash.outputs.hash }}
+
+  build:
+    name: Build and Test (Release Asserts)
+    needs: setup-build
+    runs-on: ubuntu-20.04
+    steps:
     - name: Build and Test torch-mlir (Assert)
       run: |
         cd $GITHUB_WORKSPACE
@@ -85,10 +91,13 @@ jobs:
           TORCH_MLIR_PYTHON_PACKAGE_VERSION="${{ github.event.inputs.python_package_version }}" \
           ./build_tools/build_python_wheels.sh
 
-    # If we were given a release_id, then upload the package we just built
-    # to the github releases page.
+  publish-release:
+    name: Publish release
+    needs: build
+    if: github.event.inputs.release_id != ''
+    runs-on: ubuntu-20.04
+    # upload the package we just built to the github releases page.
     - name: Upload Release Assets (if requested)
-      if: github.event.inputs.release_id != ''
       id: upload-release-assets
       uses: dwenegar/upload-release-assets@v1
       env:
@@ -99,7 +108,6 @@ jobs:
     # Publishing is necessary to make the release visible to `pip`
     # on the github releases page.
     - name: Publish Release (if requested)
-      if: github.event.inputs.release_id != ''
       id: publish_release
       uses: eregon/publish-release@v1
       env:
