@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Arithmetic/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -417,4 +418,28 @@ class MungeMemrefCopy : public MungeMemrefCopyBase<MungeMemrefCopy> {
 std::unique_ptr<OperationPass<FuncOp>>
 mlir::torch::RefBackend::createMungeMemrefCopyPass() {
   return std::make_unique<MungeMemrefCopy>();
+}
+
+namespace {
+class GeneralizeTensorPad
+    : public GeneralizeTensorPadBase<GeneralizeTensorPad> {
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<linalg::LinalgDialect>();
+  }
+
+  void runOnOperation() override {
+    MLIRContext *context = &getContext();
+    RewritePatternSet patterns(&getContext());
+    patterns.insert<linalg::GeneralizePadOpPattern>(context);
+    if (failed(applyPatternsAndFoldGreedily(getOperation(),
+                                            std::move(patterns)))) {
+      return signalPassFailure();
+    }
+  }
+};
+} // namespace
+
+std::unique_ptr<OperationPass<FuncOp>>
+mlir::torch::RefBackend::createGeneralizeTensorPadPass() {
+  return std::make_unique<GeneralizeTensorPad>();
 }

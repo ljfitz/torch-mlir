@@ -164,6 +164,7 @@ class RefBackendInvoker:
 
 
 LOWERING_PIPELINE = ",".join([
+    "func.func(refback-generalize-tensor-pad)",
     # Bufferize.
     "builtin.func(scf-bufferize)",
     "builtin.func(tm-tensor-bufferize)",
