@@ -47,9 +47,9 @@ torch_upstream::ScalarType Torch::getScalarTypeForType(Type type) {
     return torch_upstream::ScalarType::Float;
   if (type.isa<Float64Type>())
     return torch_upstream::ScalarType::Double;
-  if (type.isSignedInteger(64))
+  if (type.isSignedInteger(64) || type.isUnsignedInteger(64))
     return torch_upstream::ScalarType::Long;
-  if (type.isSignedInteger(32))
+  if (type.isSignedInteger(32) || type.isUnsignedInteger(32))
     return torch_upstream::ScalarType::Int;
   if (type.isSignlessInteger(1))
     return torch_upstream::ScalarType::Bool;
