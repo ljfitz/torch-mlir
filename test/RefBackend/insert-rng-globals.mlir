@@ -1,7 +1,7 @@
 // RUN: torch-mlir-opt %s -refback-insert-rng-globals -split-input-file | FileCheck %s
 
 // CHECK-LABEL:   memref.global "private" @global_seed : memref<i64> = dense<0>
-// CHECK-LABEL:   func.func @f() -> i64 {
+// CHECK-LABEL:   func @f() -> i64 {
 // CHECK:           %[[MEMREF:.*]] = memref.get_global @global_seed : memref<i64>
 // CHECK:           %[[SEED:.*]] = memref.load %[[MEMREF]][] : memref<i64>
 // CHECK:           %[[MULTIPLIER:.*]] = arith.constant 6364136223846793005 : i64
