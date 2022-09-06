@@ -2535,12 +2535,12 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeAtenLayerNormOp>(context);
     target.addIllegalOp<AtenNativeBatchNormOp>();
     patterns.add<DecomposeAtenNativeBatchNormOp>(context);
-    target.addIllegalOp<AtenConvolutionOverrideableOp>();
-    patterns.add<DecomposeAtenConvolutionOverrideableOp>(context);
-    target.addIllegalOp<Aten_ConvolutionOp>();
-    patterns.add<DecomposeAten_ConvolutionOp>(context);
-    target.addIllegalOp<AtenConv2dOp>();
-    patterns.add<DecomposeAtenConv2dOp>(context);
+    // target.addIllegalOp<AtenConvolutionOverrideableOp>();
+    // patterns.add<DecomposeAtenConvolutionOverrideableOp>(context);
+    // target.addIllegalOp<Aten_ConvolutionOp>();
+    // patterns.add<DecomposeAten_ConvolutionOp>(context);
+    // target.addIllegalOp<AtenConv2dOp>();
+    // patterns.add<DecomposeAtenConv2dOp>(context);
     patterns.add<DecomposeAtenArangeOp>(context);
     target.addIllegalOp<AtenArangeOp>();
     patterns.add<DecomposeAtenArangeStartOp>(context);
