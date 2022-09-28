@@ -658,7 +658,8 @@ void TypeAnalysis::visitOperation(Operation *op,
           AtenZero_Op, AtenIndexTensorOp, ValsemVariantAtenIndexPutImplOp,
           AtenIndexPutOp, ValsemVariantAtenCopyOp, AtenZeroOp,
           AtenIndexPutHackedTwinOp, AtenMaskedFillScalarOp, AtenFlipOp,
-          PrimAbsScalarOp, AtenNumpyTOp, AtenTriuOp, AtenMaskedFillTensorOp>(
+          PrimAbsScalarOp, AtenNumpyTOp, AtenTriuOp, AtenMaskedFillTensorOp,
+          AtenRollOp>(
           op)) {
     return incorporateKnowledge(op->getResult(0), operands[0]->getValue());
   }
@@ -712,7 +713,8 @@ void TypeAnalysis::visitOperation(Operation *op,
 
   // Promote the two dtypes assuming non-zero rank.
   if (isa<AtenMmOp, AtenBmmOp, AtenMatmulOp, AtenConv2dOp, AtenConvolutionOp,
-          Aten_ConvolutionOp, AtenConvolutionOverrideableOp>(op)) {
+          Aten_ConvolutionOp, Aten_ConvolutionDeprecatedOp,
+          AtenConvolutionOverrideableOp, AtenConvTranspose2dInputOp>(op)) {
     auto knowledge =
         ValueKnowledge::getTensorPessimisticValueState(op->getContext());
     knowledge.dtype = getPromotedResultTypeAssumingNonZeroRank(

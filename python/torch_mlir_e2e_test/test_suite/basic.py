@@ -5,9 +5,9 @@
 
 import torch
 
-from torch_mlir_e2e_test.torchscript.framework import TestUtils
-from torch_mlir_e2e_test.torchscript.registry import register_test_case
-from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
+from torch_mlir_e2e_test.framework import TestUtils
+from torch_mlir_e2e_test.registry import register_test_case
+from torch_mlir_e2e_test.annotations import annotate_args, export
 
 # ==============================================================================
 
@@ -80,7 +80,7 @@ class IsFloatingPointInt(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IsFloatingPointInt())
 def IsFloatingPointInt_False(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3, 3)))
+    module.forward(tu.randint(3, 3, high=100))
 
 
 # ==============================================================================
@@ -736,7 +736,7 @@ class EmbeddingModuleI64(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: EmbeddingModuleI64())
 def EmbeddingModuleI64_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3, 3)))
+    module.forward(tu.randint(3, 3, high=100))
 
 
 # ==============================================================================
@@ -762,7 +762,7 @@ class EmbeddingModuleI32(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: EmbeddingModuleI32())
 def EmbeddingModuleI32_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3, 3)).to(torch.int32))
+    module.forward(tu.randint(3, 3, high=100).to(torch.int32))
 
 
 # ==============================================================================
@@ -787,7 +787,7 @@ class EmbeddingModuleI32Static(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: EmbeddingModuleI32Static())
 def EmbeddingModuleI32Static_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3, 3)).to(torch.int32))
+    module.forward(tu.randint(3, 3, high=100).to(torch.int32))
 
 
 # ==============================================================================
@@ -813,7 +813,7 @@ class EmbeddingModule1DIndices(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: EmbeddingModule1DIndices())
 def EmbeddingModule1DIndices_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3,)).to(torch.int32))
+    module.forward(tu.randint(3, high=100).to(torch.int32))
 
 
 # ==============================================================================
@@ -1047,6 +1047,27 @@ def BroadcastToModule_basic(module, tu: TestUtils):
 # ==============================================================================
 
 
+class RollModule(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([3, -1, 2], torch.float32, True),
+    ])
+    def forward(self, x):
+        return x.roll([2, -1], [0, 2])
+
+
+@register_test_case(module_factory=lambda: RollModule())
+def RollModule_basic(module, tu: TestUtils):
+    module.forward(tu.rand(3, 1, 2))
+
+# ==============================================================================
+
+
 class RepeatModule(torch.nn.Module):
 
     def __init__(self):
@@ -1064,7 +1085,6 @@ class RepeatModule(torch.nn.Module):
 @register_test_case(module_factory=lambda: RepeatModule())
 def RepeatModule_basic(module, tu: TestUtils):
     module.forward(tu.rand(3, 1, 2))
-
 
 # ==============================================================================
 
@@ -1311,7 +1331,7 @@ class DropoutEvalIntModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: DropoutEvalIntModule())
 def DropoutEvalIntModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(5, 10, (3, 4)))
+    module.forward(tu.randint(3, 4, low=5, high=10))
 
 
 # ==============================================================================
@@ -1400,7 +1420,7 @@ class NumelZeroRankModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: NumelZeroRankModule())
 def NumelZeroRankModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(10, []))
+    module.forward(tu.randint(high=10))
 
 
 # ==============================================================================
@@ -1626,7 +1646,7 @@ class ReturnTwoTensorF32I64(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: ReturnTwoTensorF32I64())
 def ReturnTwoTensorF32I64_basic(module, tu: TestUtils):
-    module.forward(tu.rand(2, 3), torch.randint(5, (2, 3)))
+    module.forward(tu.rand(2, 3), tu.randint(2, 3, high=5))
 
 
 # ==============================================================================
@@ -1649,7 +1669,7 @@ class IndexTensorModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorModule())
 def IndexTensorModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5), torch.randint(4, (2, 3)))
+    module.forward(tu.rand(5), tu.randint(2, 3, high=4))
 
 
 # ==============================================================================
@@ -1672,7 +1692,7 @@ class IndexTensorModule3dInput(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorModule3dInput())
 def IndexTensorModule3dInput_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5, 4, 3), torch.randint(3, (2, 3)))
+    module.forward(tu.rand(5, 4, 3), tu.randint(2, 3, high=3))
 
 
 # ==============================================================================
@@ -1695,7 +1715,7 @@ class IndexTensorSelectDimModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorSelectDimModule())
 def IndexTensorSelectDimModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(2, 4, 6), torch.randint(3, (2, 3)))
+    module.forward(tu.rand(2, 4, 6), tu.randint(2, 3, high=3))
 
 # ==============================================================================
 
@@ -1718,7 +1738,7 @@ class IndexTensorMultiInput(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorMultiInput())
 def IndexTensorMultiInput_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5, 4, 3), torch.randint(3, (3, 3)), torch.randint(3, (3,)))
+    module.forward(tu.rand(5, 4, 3), tu.randint(3, 3, high=3), tu.randint(3, high=3))
 
 
 # ==============================================================================
@@ -1742,7 +1762,126 @@ class IndexTensorMultiInputOneDim(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorMultiInputOneDim())
 def IndexTensorMultiInputOneDim_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5, 4, 3), torch.randint(4, (6, 1)), torch.randint(3, (3,)))
+    module.forward(tu.rand(5, 4, 3), tu.randint(6, 1, high=4), tu.randint(3, high=3))
+
+
+# ==============================================================================
+
+
+class IndexTensorMultiInputContiguousOneDimDynamic(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([-1, -1, -1], torch.float32, True),
+        ([-1, 1], torch.int64, True),
+        ([-1], torch.int64, True),
+    ])
+    def forward(self, x, index1, index2):
+        return torch.ops.aten.index(x, (
+            None,
+            index1,
+            index2,
+        ))
+
+
+@register_test_case(
+    module_factory=lambda: IndexTensorMultiInputContiguousOneDimDynamic())
+def IndexTensorMultiInputContiguousOneDimDynamic_basic(module, tu: TestUtils):
+    module.forward(tu.rand(5, 4, 3), tu.randint(6, 1, high=4),
+                   tu.randint(3, high=3))
+
+
+# ==============================================================================
+
+
+class IndexTensorMultiInputNonContiguousOneDimDynamic(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([-1, -1, -1], torch.float32, True),
+        ([-1, 1], torch.int64, True),
+        ([-1], torch.int64, True),
+    ])
+    def forward(self, x, index1, index2):
+        return torch.ops.aten.index(x, (
+            index1,
+            None,
+            index2,
+        ))
+
+
+@register_test_case(
+    module_factory=lambda: IndexTensorMultiInputNonContiguousOneDimDynamic())
+def IndexTensorMultiInputNonContiguousOneDimDynamic_basic(
+        module, tu: TestUtils):
+    module.forward(tu.rand(5, 4, 3), tu.randint(6, 1, high=4),
+                   tu.randint(3, high=3))
+
+
+# ==============================================================================
+
+
+class IndexTensorMultiInputNonContiguousDynamic(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([-1, -1, -1], torch.float32, True),
+        ([-1, 2], torch.int64, True),
+        ([-1], torch.int64, True),
+    ])
+    def forward(self, x, index1, index2):
+        return torch.ops.aten.index(x, (
+            index2,
+            None,
+            index1,
+        ))
+
+
+@register_test_case(
+    module_factory=lambda: IndexTensorMultiInputNonContiguousDynamic())
+def IndexTensorMultiInputNonContiguousDynamic_basic(module, tu: TestUtils):
+    module.forward(tu.rand(5, 4, 3), tu.randint(6, 2, high=2),
+                   tu.randint(2, high=3))
+
+
+# ==============================================================================
+
+
+class IndexTensorMultiInputNonContiguousMultipleStaticDims(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    @export
+    @annotate_args([
+        None,
+        ([-1, -1, -1, -1], torch.float32, True),
+        ([4, 1], torch.int64, True),
+        ([1, 3], torch.int64, True),
+        ([-1, 3], torch.int64, True),
+    ])
+    def forward(self, x, index1, index2, index3):
+        return torch.ops.aten.index(x, (index1, index2, index3))
+
+
+@register_test_case(module_factory=lambda:
+                    IndexTensorMultiInputNonContiguousMultipleStaticDims())
+def IndexTensorMultiInputNonContiguousMultipleStaticDims_basic(
+        module, tu: TestUtils):
+    module.forward(tu.rand(5, 4, 3, 2), tu.randint(4, 1, high=3),
+                   tu.randint(1, 3, high=1), tu.randint(4, 3, high=1))
 
 
 # ==============================================================================
@@ -1766,7 +1905,7 @@ class IndexTensorMultiInputNonContiguous(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorMultiInputNonContiguous())
 def IndexTensorMultiInputNonContiguous_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5, 4, 3, 2), torch.randint(3, (4, 2)), torch.randint(1, (4, 2,)))
+    module.forward(tu.rand(5, 4, 3, 2), tu.randint(4, 2, high=3), tu.randint(4, 2, high=1))
 
 
 # ==============================================================================
@@ -1792,9 +1931,9 @@ class IndexTensorMultiInputThreeIndexers(torch.nn.Module):
 @register_test_case(module_factory=lambda: IndexTensorMultiInputThreeIndexers())
 def IndexTensorMultiInputThreeIndexers_basic(module, tu: TestUtils):
     module.forward(tu.rand(1, 2, 4, 4, 5, 3),
-            torch.randint(3, (8, 4, 2,)),
-            torch.randint(4, (8, 1, 1,)),
-            torch.randint(2, (4, 2,)))
+                   tu.randint(8, 4, 2, high=3),
+                   tu.randint(8, 1, 1, high=4),
+                   tu.randint(4, 2, high=2))
 
 
 # ==============================================================================
@@ -1818,7 +1957,7 @@ class IndexTensorMultiInputContiguousCenter(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: IndexTensorMultiInputContiguousCenter())
 def IndexTensorMultiInputContiguousCenter_basic(module, tu: TestUtils):
-    module.forward(tu.rand(5, 4, 3, 2), torch.randint(3, (2, 2)), torch.randint(2, [2]))
+    module.forward(tu.rand(5, 4, 3, 2), tu.randint(2, 2, high=3), tu.randint(2, high=2))
 
 
 # ==============================================================================
@@ -1950,7 +2089,7 @@ class HardTanhIntModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: HardTanhIntModule())
 def HardTanhIntModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(-5, 5, (100, 100)))
+    module.forward(tu.randint(100, 100, low=-5, high=5))
 
 
 # ==============================================================================
@@ -1972,7 +2111,7 @@ class BincountModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: BincountModule())
 def BincountModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(10, (1000, )))
+    module.forward(tu.randint(1000, high=10))
 
 
 # ==============================================================================
@@ -1994,7 +2133,7 @@ class BincountStaticSizeModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: BincountStaticSizeModule())
 def BincountStaticSizeModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (200, )))
+    module.forward(tu.randint(200, high=100))
 
 
 # ==============================================================================
@@ -2016,7 +2155,7 @@ class BincountMinlengthModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: BincountMinlengthModule())
 def BincountMinlengthModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(5, (20, )))
+    module.forward(tu.randint(20, high=5))
 
 
 # ==============================================================================
@@ -2059,8 +2198,8 @@ class ExpandAsIntModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: ExpandAsIntModule())
 def ExpandAsIntModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (1, 1, 1)),
-                   torch.randint(200, (4, 5, 6)))
+    module.forward(tu.randint(1, 1, 1, high=100),
+                   tu.randint(4, 5, 6, high=200))
 
 
 # ==============================================================================
@@ -2123,7 +2262,7 @@ class CopyWithDifferentDTypesModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: CopyWithDifferentDTypesModule())
 def CopyWithDifferentDTypesModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(100, (3, 2, 4)), tu.rand(3, 2, 4))
+    module.forward(tu.randint(3, 2, 4, high=100), tu.rand(3, 2, 4))
 
 
 class CopyWithDifferentDTypesAndSizesModule(torch.nn.Module):
@@ -2144,7 +2283,7 @@ class CopyWithDifferentDTypesAndSizesModule(torch.nn.Module):
 @register_test_case(
     module_factory=lambda: CopyWithDifferentDTypesAndSizesModule())
 def CopyWithDifferentDTypesAndSizesModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(3, 2, 4), torch.randint(1000, (3, 2, 1)))
+    module.forward(tu.rand(3, 2, 4), tu.randint(3, 2, 1, high=1000))
 
 
 # ==============================================================================
@@ -2312,7 +2451,7 @@ class ScalarImplicitIntModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: ScalarImplicitIntModule())
 def ScalarImplicitIntModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(-100, 100, ()))
+    module.forward(tu.randint(low=-100, high=100))
 
 
 # ==============================================================================
@@ -2378,7 +2517,7 @@ class BaddbmmDifferentDtypesModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: BaddbmmDifferentDtypesModule())
 def BaddbmmDifferentDtypesModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(10, (3, 4, 5)), tu.rand(3, 4, 6),
+    module.forward(tu.randint(3, 4, 5, high=10), tu.rand(3, 4, 6),
                    tu.rand(3, 6, 5))
 
 
@@ -2591,7 +2730,7 @@ class AtenEmbeddingBagSumExample(torch.nn.Module):
 
     @export
     @annotate_args([
-        None, 
+        None,
         ([-1, -1], torch.float32, True),
         ([-1], torch.int64, True),
         ([-1], torch.int64, True),
@@ -2613,7 +2752,7 @@ class Aten_EmbeddingBagExample(torch.nn.Module):
 
     @export
     @annotate_args([
-        None, 
+        None,
         ([-1, -1], torch.float32, True),
         ([-1], torch.int64, True),
         ([-1], torch.int64, True),

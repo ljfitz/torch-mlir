@@ -30,7 +30,8 @@ using namespace mlir::torch::Torch;
 static LogicalResult checkType(Operation *op, Type type,
                                bool actuallyEmitDiagnostics) {
   // Allow various scalar types that backends are expected to be able to handle.
-  if (type.isa<Torch::IntType, Torch::FloatType, Torch::BoolType>())
+  if (type.isa<Torch::IntType, Torch::FloatType, Torch::BoolType,
+               Torch::DeviceType>())
     return success();
 
   // Backends are not expected to support dynamic computations on these types,
@@ -201,9 +202,11 @@ class LowerToBackendContractPass
     : public LowerToBackendContractBase<LowerToBackendContractPass> {
 public:
   LowerToBackendContractPass() = default;
-  LowerToBackendContractPass(int maxIterations, bool decompose) {
+  LowerToBackendContractPass(int maxIterations, bool decompose,
+                             ArrayRef<std::string> backendLegalOps) {
     this->maxIterations = maxIterations;
     this->decompose = decompose;
+    this->backendLegalOps = backendLegalOps;
   }
   void runOnOperation() override {
     ModuleOp module = getOperation();
@@ -211,6 +214,7 @@ public:
     OpPassManager pm(module.getOperationName());
     TorchLoweringPipelineOptions options;
     options.decompose = decompose;
+    options.backendLegalOps = backendLegalOps;
     createTorchSimplificationPipeline(pm, options);
 
     int i = 0;
@@ -241,7 +245,8 @@ public:
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::torch::Torch::createLowerToBackendContractPass(int maxIterations,
-                                                     bool decompose) {
-  return std::make_unique<LowerToBackendContractPass>(maxIterations, decompose);
+mlir::torch::Torch::createLowerToBackendContractPass(
+    int maxIterations, bool decompose, ArrayRef<std::string> backendLegalOps) {
+  return std::make_unique<LowerToBackendContractPass>(maxIterations, decompose,
+                                                      backendLegalOps);
 }

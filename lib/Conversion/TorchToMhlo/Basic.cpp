@@ -12,10 +12,11 @@
 #include "../PassDetail.h"
 #include "./MhloLegalizeUtils.h"
 #include "./PopulatePatterns.h"
-#include "mlir-hlo/Dialect/mhlo/IR/chlo_ops.h"
 #include "mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
+#include "mlir-hlo/utils/hlo_utils.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "stablehlo/dialect/ChloOps.h"
 #include "torch-mlir/Conversion/Utils/Utils.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
 #include "torch-mlir/Dialect/Torch/IR/TorchOps.h"
@@ -291,33 +292,33 @@ public:
     // TODO: what is the PyTorch default type promotion?
     rhs = mhlo::promoteType(rewriter, rhs, lhsTy);
 
-    mhlo::ComparisonTypeAttr compareTypeAttr;
-    mhlo::ComparisonDirectionAttr compareDirectionAttr;
+    chlo::ComparisonTypeAttr compareTypeAttr;
+    chlo::ComparisonDirectionAttr compareDirectionAttr;
 
     if (lhsElemTy.isa<mlir::FloatType>()) {
-      compareTypeAttr = mhlo::ComparisonTypeAttr::get(
-          op->getContext(), mhlo::ComparisonType::FLOAT);
+      compareTypeAttr = chlo::ComparisonTypeAttr::get(
+          op->getContext(), chlo::ComparisonType::FLOAT);
     } else if (lhsElemTy.isa<mlir::IntegerType>()) {
-      compareTypeAttr = mhlo::ComparisonTypeAttr::get(
-          op->getContext(), mhlo::ComparisonType::SIGNED);
+      compareTypeAttr = chlo::ComparisonTypeAttr::get(
+          op->getContext(), chlo::ComparisonType::SIGNED);
     }
 
     if (std::is_same<AtenOpT, AtenLtTensorOp>() ||
         std::is_same<AtenOpT, AtenLtScalarOp>()) {
-      compareDirectionAttr = mhlo::ComparisonDirectionAttr::get(
-          op->getContext(), mhlo::ComparisonDirection::LT);
+      compareDirectionAttr = chlo::ComparisonDirectionAttr::get(
+          op->getContext(), chlo::ComparisonDirection::LT);
     } else if (std::is_same<AtenOpT, AtenGtTensorOp>() ||
                std::is_same<AtenOpT, AtenGtScalarOp>()) {
-      compareDirectionAttr = mhlo::ComparisonDirectionAttr::get(
-          op->getContext(), mhlo::ComparisonDirection::GT);
+      compareDirectionAttr = chlo::ComparisonDirectionAttr::get(
+          op->getContext(), chlo::ComparisonDirection::GT);
     } else if (std::is_same<AtenOpT, AtenEqTensorOp>() ||
                std::is_same<AtenOpT, AtenEqScalarOp>()) {
-      compareDirectionAttr = mhlo::ComparisonDirectionAttr::get(
-          op->getContext(), mhlo::ComparisonDirection::EQ);
+      compareDirectionAttr = chlo::ComparisonDirectionAttr::get(
+          op->getContext(), chlo::ComparisonDirection::EQ);
     } else if (std::is_same<AtenOpT, AtenNeTensorOp>() ||
                std::is_same<AtenOpT, AtenNeScalarOp>()) {
-      compareDirectionAttr = mhlo::ComparisonDirectionAttr::get(
-          op->getContext(), mhlo::ComparisonDirection::NE);
+      compareDirectionAttr = chlo::ComparisonDirectionAttr::get(
+          op->getContext(), chlo::ComparisonDirection::NE);
     }
     DenseIntElementsAttr bcastDimensions;
     rewriter.replaceOpWithNewOp<chlo::BroadcastCompareOp>(
@@ -977,8 +978,41 @@ LogicalResult ConvertAtenOp<AtenCatOp>::matchAndRewrite(
     v = mhlo::promoteType(rewriter, v, outType);
   }
 
+  size_t posDim = toPositiveDim(dim, outType.getRank());
   rewriter.replaceOpWithNewOp<mhlo::ConcatenateOp>(
-      op, ValueRange(builtinTensors), static_cast<uint64_t>(dim));
+      op, outType, ValueRange(builtinTensors), posDim);
+  return success();
+}
+} // namespace
+
+// AtenNumelOp
+namespace {
+template <>
+LogicalResult ConvertAtenOp<AtenNumelOp>::matchAndRewrite(
+    AtenNumelOp op,
+    OpAdaptor adaptor,
+    ConversionPatternRewriter& rewriter) const {
+  auto self = adaptor.self();
+  auto selfTy = self.getType().dyn_cast<RankedTensorType>();
+  size_t rank = selfTy.getRank();
+
+  Type intType = rewriter.getIntegerType(mhlo::kMhloDimSizeBits);
+  auto loc = op->getLoc();
+  Value numel =
+      rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(intType, 1));
+  for (size_t d = 0 ; d < rank; ++ d) {
+     Value dimSize = rewriter.create<arith::IndexCastOp>(
+        loc, intType, rewriter.create<tensor::DimOp>(loc, self, d));
+     numel = rewriter.create<arith::MulIOp>(loc, numel, dimSize);
+  }
+
+  auto outTy = getTypeConverter()->convertType(op.getType());
+  if (outTy != numel.getType()) {
+    rewriter.replaceOpWithNewOp<arith::ExtSIOp>(
+        op, outTy, numel);
+  } else {
+    rewriter.replaceOp(op, numel);
+  }
   return success();
 }
 } // namespace
@@ -1067,5 +1101,6 @@ void mlir::torch::torch_to_mhlo::populateBasicOpPatternsAndLegality(
 
   INSERT_ATENOP_PATTERN(AtenBatchNormOp);
   INSERT_ATENOP_PATTERN(AtenNativeLayerNormOp);
+  INSERT_ATENOP_PATTERN(AtenNumelOp);
 #undef INSERT_ATENOP_PATTERN
 }

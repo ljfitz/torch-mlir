@@ -5,9 +5,9 @@
 
 import torch
 
-from torch_mlir_e2e_test.torchscript.framework import TestUtils
-from torch_mlir_e2e_test.torchscript.registry import register_test_case
-from torch_mlir_e2e_test.torchscript.annotations import annotate_args, export
+from torch_mlir_e2e_test.framework import TestUtils
+from torch_mlir_e2e_test.registry import register_test_case
+from torch_mlir_e2e_test.annotations import annotate_args, export
 
 # ==============================================================================
 
@@ -229,7 +229,7 @@ class SelectIntModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: SelectIntModule())
 def SelectIntModule_basic(module, tu: TestUtils):
-    module.forward(torch.randint(10, (5,5)))
+    module.forward(tu.randint(5,5, high=10))
 
 # ==============================================================================
 

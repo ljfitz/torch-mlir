@@ -524,21 +524,15 @@ def aten〇var(self: List[int], unbiased: bool = True) -> List[int]:
     return []
 
 def aten〇var〇dim(self: List[int], dim: Optional[List[int]], unbiased: bool = True, keepdim: bool = False) -> List[int]:
-    if dim is None or len(dim)==0:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, None)
 
 def aten〇var〇correction(self: List[int], dim: Optional[List[int]], correction: Optional[int], keepdim: bool = False) -> List[int]:
-    if dim is None or len(dim)==0:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, None)
 
 def aten〇std(self: List[int], unbiased: bool = True) -> List[int]:
     return []
 
 def aten〇std〇dim(self: List[int], dim: Optional[List[int]], unbiased: bool = True, keepdim: bool = False) -> List[int]:
-    if dim is None or len(dim)==0:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, None)
 
 def _reduce_along_dim(self: List[int], dim: int, keepdim: bool):
@@ -574,13 +568,9 @@ def aten〇max〇dim(self: List[int], dim: int, keepdim: bool = False) -> Tuple[
     return reduced_shape, reduced_shape
 
 def aten〇mean〇dim(self: List[int], dim: Optional[List[int]], keepdim: bool = False, dtype: Optional[int] = None) -> List[int]:
-    if dim is None or len(dim)==0:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, dtype)
 
 def aten〇sum〇dim_IntList(self: List[int], dim: Optional[List[int]], keepdim: bool = False, dtype: Optional[int] = None) -> List[int]:
-    if dim is None or len(dim)==0:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, dtype)
 
 def aten〇permute(self: List[int], dims: List[int]) -> List[int]:
@@ -644,6 +634,9 @@ def aten〇repeat(self: List[int], repeats: List[int]) -> List[int]:
     for i in range(tensor_dim):
         out.append(self[i] * repeats[i + leading_rank])
     return out
+
+def aten〇roll(self: List[int], shifts: List[int], dims: List[int] = ()) -> List[int]:
+    return upstream_shape_functions.unary(self)
 
 def aten〇expand(self: List[int], size: List[int], implicit: bool = False) -> List[int]:
     return upstream_shape_functions.expand(self, size)
@@ -945,12 +938,18 @@ def aten〇topk(self: List[int], k: int, dim: int = -1, largest: bool = True, so
 def aten〇conv2d(input: List[int], weight: List[int], bias: Optional[List[int]] = None, stride: List[int] = (1, 1), padding: List[int] = (0, 0), dilation: List[int] = (1, 1), groups: int = 1) -> List[int]:
     return upstream_shape_functions.conv2d(input, weight, bias, stride, padding, dilation, groups)
 
+def aten〇conv_transpose2d〇input(input: List[int], weight: List[int], bias: Optional[List[int]] = None, stride: List[int] = (1, 1), padding: List[int] = (0, 0), output_padding: List[int] = (0, 0), groups: int = 1, dilation: List[int] = (1, 1)) -> List[int]:
+    return upstream_shape_functions.conv_transpose2d_input(input, weight, bias, stride, padding, output_padding, groups, dilation)
+
 def aten〇convolution(input: List[int], weight: List[int], bias: Optional[List[int]], stride: List[int], padding: List[int], dilation: List[int], transposed: bool, output_padding: List[int], groups: int) -> List[int]:
-    return upstream_shape_functions.conv_output_size(input, weight, bias, stride, padding, dilation, groups)
+    return upstream_shape_functions.conv_forwards(input, weight, bias, stride, padding, dilation, transposed, output_padding, groups)
 
 def aten〇_convolution(input: List[int], weight: List[int], bias: Optional[List[int]], stride: List[int], padding: List[int], dilation: List[int], transposed: bool, output_padding: List[int], groups: int, benchmark: bool, deterministic: bool, cudnn_enabled: bool, allow_tf32: bool) -> List[int]:
     return aten〇convolution(input, weight, bias, stride, padding, dilation, transposed, output_padding, groups)
-    
+
+def aten〇_convolution〇deprecated(input: List[int], weight: List[int], bias: Optional[List[int]], stride: List[int], padding: List[int], dilation: List[int], transposed: bool, output_padding: List[int], groups: int, benchmark: bool, deterministic: bool, cudnn_enabled: bool) -> List[int]:
+    return aten〇convolution(input, weight, bias, stride, padding, dilation, transposed, output_padding, groups)
+
 def aten〇flip(self: List[int], dims: List[int]) -> List[int]:
     return self
 
@@ -1169,8 +1168,6 @@ def aten〇bincount(self: List[int], weights: Optional[List[int]] = None, minlen
     return [hacky_get_unknown_dimension_size()]
 
 def aten〇linalg_vector_norm(self: List[int], ord: float = 2, dim: Optional[List[int]] = None, keepdim: bool = False, dtype: Optional[int] = None) -> List[int]:
-    if dim is None:
-        dim = list(range(len(self)))
     return upstream_shape_functions.sum_mean_dim(self, dim, keepdim, dtype)
 
 # ==============================================================================

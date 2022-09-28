@@ -709,6 +709,77 @@ public:
 };
 } // namespace
 
+// Decompose aten.roll into aten.slice and aten.cat ops.
+// https://pytorch.org/docs/stable/generated/torch.roll.html
+namespace {
+class DecomposeAtenRollOp : public OpRewritePattern<AtenRollOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenRollOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Value> shifts;
+    if (!getListConstructElements(op.shifts(), shifts))
+      return rewriter.notifyMatchFailure(
+          op, "unimplemented: shifts not list of Scalar");
+    SmallVector<Value> dims;
+    if (!getListConstructElements(op.dims(), dims))
+      return rewriter.notifyMatchFailure(
+          op, "unimplemented: dims not list of Scalar");
+
+    if (shifts.size() != dims.size())
+      return op.emitError("list sizes of shifts and dims are not the same");
+
+    auto loc = op.getLoc();
+    Value constNone = rewriter.create<ConstantNoneOp>(loc);
+    Value constZero = rewriter.create<Torch::ConstantIntOp>(
+        loc, rewriter.getI64IntegerAttr(0));
+    Value constOne = rewriter.create<Torch::ConstantIntOp>(
+        loc, rewriter.getI64IntegerAttr(1));
+    auto self = op.self();
+    auto selfTy = self.getType().cast<BaseTensorType>();
+    // roll(input, shift, dim) = cat({
+    //   slice(input, dim, -shift, none),
+    //   slice(input, dim, 0, -shift)}, dim)
+    auto imitateRoll = [&](Value input, Value shift, Value dim,
+                           int64_t cstDim) {
+      Value negShift = rewriter.create<AtenNegIntOp>(loc, shift);
+      ArrayRef<int64_t> inputShape = selfTy.getSizes();
+      SmallVector<int64_t> sizes;
+      sizes.append(inputShape.begin(), inputShape.end());
+      sizes[cstDim] = ShapedType::kDynamicSize;
+      Type sliceTy = selfTy.getWithSizesAndDtype(llvm::makeArrayRef(sizes),
+                                                 selfTy.getDtype());
+      Value slice0 = rewriter.create<AtenSliceTensorOp>(
+          loc, sliceTy, input, dim, negShift, constNone, constOne);
+      Value slice1 = rewriter.create<AtenSliceTensorOp>(
+          loc, sliceTy, input, dim, constZero, negShift, constOne);
+
+      Type listType = Torch::ListType::get(sliceTy);
+      Value slices = rewriter.create<PrimListConstructOp>(
+          loc, listType, llvm::ArrayRef<Value>{slice0, slice1});
+      return rewriter.create<AtenCatOp>(loc, self.getType(), slices, dim);
+    };
+    int rank = getTensorRank(self);
+    if (rank < 0)
+      return rewriter.notifyMatchFailure(op, "Unimplemented: unranked tensor");
+    Value output = self;
+    auto nShifts = shifts.size();
+    for (size_t k = 0; k < nShifts; ++k) {
+      auto dim = dims[k];
+      int64_t cstDim = -1;
+      if (!matchPattern(dim, m_TorchConstantInt(&cstDim)))
+        return rewriter.notifyMatchFailure(
+            op, "unimplemented: dim must be constant");
+
+      cstDim = toPositiveDim(cstDim, rank);
+      output = imitateRoll(output, shifts[k], dim, cstDim);
+    }
+    rewriter.replaceOp(op, output);
+    return success();
+  }
+};
+} // namespace
+
 // Decompose aten.repeat into aten.expand and aten.view ops.
 //
 // Ref: https://pytorch.org/docs/stable/generated/torch.Tensor.repeat.html
@@ -834,6 +905,68 @@ public:
 };
 } // namespace
 
+// Decompose aten.flatten.using_ints into aten.view op.
+namespace {
+class DecomposeAtenFlattenUsingIntsOp
+    : public OpRewritePattern<AtenFlattenUsingIntsOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenFlattenUsingIntsOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value self = op.self();
+    MLIRContext *context = op.getContext();
+    int64_t rank = getTensorRank(self);
+    if (rank < 0)
+      return rewriter.notifyMatchFailure(op, "unimplemented: unranked tensor");
+
+    int64_t start, end;
+    if (!matchPattern(op.start_dim(), m_TorchConstantInt(&start)) ||
+        !matchPattern(op.end_dim(), m_TorchConstantInt(&end))) {
+      return rewriter.notifyMatchFailure(
+          op, "unimplemented: requires start and end dims to be constants");
+    }
+
+    SmallVector<Value, 4> newSizes;
+    if (rank == 0) {
+      Value one =
+          rewriter.create<ConstantIntOp>(loc, rewriter.getI64IntegerAttr(1));
+      newSizes.push_back(one);
+    } else {
+      start = toPositiveDim(start, rank);
+      end = toPositiveDim(end, rank);
+
+      if (start > end) {
+        return rewriter.notifyMatchFailure(
+            op, "expected end dim larger than start dim");
+      }
+
+      newSizes.reserve(rank - end + start);
+      for (int64_t k = 0; k < start; ++k) {
+        Value dim =
+            rewriter.create<ConstantIntOp>(loc, rewriter.getI64IntegerAttr(k));
+        newSizes.push_back(
+            rewriter.create<AtenSizeIntOp>(loc, self, /*dim=*/dim));
+      }
+      Value flattenDimSize =
+          rewriter.create<ConstantIntOp>(loc, rewriter.getI64IntegerAttr(-1));
+      newSizes.push_back(flattenDimSize);
+      for (int64_t k = end + 1; k < rank; ++k) {
+        Value dim =
+            rewriter.create<ConstantIntOp>(loc, rewriter.getI64IntegerAttr(k));
+        newSizes.push_back(
+            rewriter.create<AtenSizeIntOp>(loc, self, /*dim=*/dim));
+      }
+    }
+    Value newSizeList = rewriter.create<PrimListConstructOp>(
+        loc, ListType::get(IntType::get(context)), newSizes);
+    rewriter.replaceOpWithNewOp<AtenViewOp>(op, op.getType(), op.self(),
+                                            newSizeList);
+    return success();
+  }
+};
+} // namespace
+
 // Decompose aten.expand into aten.broadcast_to op.
 namespace {
 class DecomposeAtenExpandOp : public OpRewritePattern<AtenExpandOp> {
@@ -927,13 +1060,14 @@ public:
 };
 } // namespace
 
-// Decompose aten.convolution_overrideable to aten.convolution
+// Decompose aten._convolution-like to aten.convolution
 namespace {
-class DecomposeAten_ConvolutionOp
-    : public OpRewritePattern<Aten_ConvolutionOp> {
+template<typename ConvolutionLikeOp>
+class DecomposeAten_ConvolutionLikeOp
+    : public OpRewritePattern<ConvolutionLikeOp> {
 public:
-  using OpRewritePattern::OpRewritePattern;
-  LogicalResult matchAndRewrite(Aten_ConvolutionOp op,
+  using OpRewritePattern<ConvolutionLikeOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(ConvolutionLikeOp op,
                                 PatternRewriter &rewriter) const override {
 
     rewriter.replaceOpWithNewOp<AtenConvolutionOp>(
@@ -962,6 +1096,26 @@ public:
         op, op->getResultTypes(), op.input(), op.weight(), op.bias(),
         op.stride(), op.padding(), op.dilation(), cstFalse, emptyList,
         op.groups());
+
+    return success();
+  }
+};
+} // namespace
+
+// Decompose aten.conv_transpose2d to aten.convolution
+namespace {
+class DecomposeAtenConvTranspose2dOp
+    : public OpRewritePattern<AtenConvTranspose2dInputOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(AtenConvTranspose2dInputOp op,
+                                PatternRewriter &rewriter) const override {
+
+    Value cstTrue = rewriter.create<Torch::ConstantBoolOp>(op.getLoc(), true);
+    rewriter.replaceOpWithNewOp<AtenConvolutionOp>(
+        op, op->getResultTypes(), op.input(), op.weight(), op.bias(),
+        op.stride(), op.padding(), op.dilation(), /*transposed=*/cstTrue,
+        op.output_padding(), op.groups());
 
     return success();
   }
@@ -2465,6 +2619,11 @@ public:
 namespace {
 class DecomposeComplexOpsPass
     : public DecomposeComplexOpsBase<DecomposeComplexOpsPass> {
+public:
+  DecomposeComplexOpsPass() = default;
+  DecomposeComplexOpsPass(ArrayRef<std::string> legalOps) {
+    this->legalOps = legalOps;
+  }
   void runOnOperation() override {
     MLIRContext *context = &getContext();
     RewritePatternSet patterns(context);
@@ -2487,10 +2646,14 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeConstantTensorAllocLikeOp<AtenZerosLikeOp, 0>>(
         context);
     target.addIllegalOp<AtenZerosLikeOp>();
+    patterns.add<DecomposeAtenRollOp>(context);
+    target.addIllegalOp<AtenRollOp>();
     patterns.add<DecomposeAtenRepeatOp>(context);
     target.addIllegalOp<AtenRepeatOp>();
     patterns.add<DecomposeAtenExpandOp>(context);
     target.addIllegalOp<AtenExpandOp>();
+    patterns.add<DecomposeAtenFlattenUsingIntsOp>(context);
+    target.addIllegalOp<AtenFlattenUsingIntsOp>();
     patterns.add<DecomposeAtenWhereScalarOp>(context);
     target.addIllegalOp<AtenWhereScalarOp>();
     patterns.add<DecomposeAtenWhereScalarOtherOp>(context);
@@ -2535,12 +2698,20 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeAtenLayerNormOp>(context);
     target.addIllegalOp<AtenNativeBatchNormOp>();
     patterns.add<DecomposeAtenNativeBatchNormOp>(context);
+    // NOTE: conv2d decompose passes were removed since mlir-xten currently does
+    // not support aten.convolution. We probably want to support the op in the
+    // future.
     // target.addIllegalOp<AtenConvolutionOverrideableOp>();
     // patterns.add<DecomposeAtenConvolutionOverrideableOp>(context);
     // target.addIllegalOp<Aten_ConvolutionOp>();
-    // patterns.add<DecomposeAten_ConvolutionOp>(context);
+    // patterns.add<DecomposeAten_ConvolutionLikeOp<Aten_ConvolutionOp>(context);
+    target.addIllegalOp<Aten_ConvolutionDeprecatedOp>();
+    patterns.add<DecomposeAten_ConvolutionLikeOp<Aten_ConvolutionDeprecatedOp>>(
+        context);
     // target.addIllegalOp<AtenConv2dOp>();
     // patterns.add<DecomposeAtenConv2dOp>(context);
+    target.addIllegalOp<AtenConvTranspose2dInputOp>();
+    patterns.add<DecomposeAtenConvTranspose2dOp>(context);
     patterns.add<DecomposeAtenArangeOp>(context);
     target.addIllegalOp<AtenArangeOp>();
     patterns.add<DecomposeAtenArangeStartOp>(context);
@@ -2630,6 +2801,10 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeAten_EmbeddingBagOp>(context);
     target.addIllegalOp<Aten_EmbeddingBagOp>();
 
+    for (std::string opName : legalOps) {
+      target.addLegalOp(OperationName(opName, context));
+    }
+
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns)))) {
       return signalPassFailure();
@@ -2637,7 +2812,9 @@ class DecomposeComplexOpsPass
   }
 };
 } // namespace
+
 std::unique_ptr<OperationPass<func::FuncOp>>
-mlir::torch::Torch::createDecomposeComplexOpsPass() {
-  return std::make_unique<DecomposeComplexOpsPass>();
+mlir::torch::Torch::createDecomposeComplexOpsPass(
+    ArrayRef<std::string> legalOps) {
+  return std::make_unique<DecomposeComplexOpsPass>(legalOps);
 }

@@ -26,7 +26,9 @@ mlir_configure_python_dev_packages()
 # Library definition
 ###########################################################################
 
-set(LIBRARY_OUTPUT_PATH  "${TORCH_MLIR_PYTHON_PACKAGES_DIR}/torch_mlir/torch_mlir/reference_lazy_backend")
+# We piggyback on the shared library setup/infra used by Torch-MLIR Python bindings for consistency.
+# https://github.com/llvm/torch-mlir/pull/1283
+set(LIBRARY_OUTPUT_PATH  "${TORCH_MLIR_PYTHON_PACKAGES_DIR}/torch_mlir/torch_mlir/_mlir_libs")
 set(OUTPUT_NAME "_REFERENCE_LAZY_BACKEND")
 
 if(TORCH_MLIR_ENABLE_LTC)
@@ -42,7 +44,7 @@ if(TORCH_MLIR_ENABLE_LTC)
   link_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
   add_link_options(-Wl,-rpath,$ORIGIN/lib)
 
-  add_library(reference_lazy_backend SHARED
+  add_library(reference_lazy_backend MODULE
           backend_impl.cpp
           reference_lazy_backend_pybind.cpp
           )
@@ -51,6 +53,7 @@ if(TORCH_MLIR_ENABLE_LTC)
           )
   target_link_libraries(reference_lazy_backend
           ${TORCH_LIBRARIES}
+          torch_python
           torch_mlir_ltc_backend
           )
 
@@ -63,6 +66,10 @@ if(TORCH_MLIR_ENABLE_LTC)
           CXX_VISIBILITY_PRESET "hidden"
           COMPILE_FLAGS "${TORCH_CXXFLAGS} -Wno-pedantic"
           )
+  mlir_python_setup_extension_rpath(reference_lazy_backend)
+
+  torch_mlir_python_target_compile_options(reference_lazy_backend)
+  mlir_check_all_link_libraries(reference_lazy_backend)
 else()
   # To avoid import errors when LTC is disabled (and a bunch of checks
   # associated with that), we will generate a dummy placeholder library.

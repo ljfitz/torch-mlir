@@ -74,8 +74,8 @@ void mlir::torch::Torch::createTorchFunctionToTorchBackendPipeline(
   pm.addPass(createAdjustCallingConventionsPass());
   // Perform the bulk of lowering to the backend contract.
   // See the pass documentation for more information.
-  pm.addPass(createLowerToBackendContractPass(options.maxIterations,
-                                              options.decompose));
+  pm.addPass(createLowerToBackendContractPass(
+      options.maxIterations, options.decompose, options.backendLegalOps));
 }
 
 // A simplification pipeline to establish the invariants of the backend
@@ -140,7 +140,8 @@ void mlir::torch::Torch::createTorchSimplificationPipeline(
   // basic blocks.
   pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   if (options.decompose) {
-    pm.addNestedPass<func::FuncOp>(Torch::createDecomposeComplexOpsPass());
+    pm.addNestedPass<func::FuncOp>(
+        Torch::createDecomposeComplexOpsPass(options.backendLegalOps));
     pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   }
 }

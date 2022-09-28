@@ -22,6 +22,121 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+## Docker Builds
+
+We have preliminary support for building with Docker images. This is a new
+flow and we would like your feedback on how it works for you and please
+feel free to file any feedback or issues.
+
+Install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/). You don't need Docker Desktop.
+
+You have three types of builds selectable with the Environment Variable `TM_PACKAGES`:`torch-mlir` the
+Release build, `out-of-tree` where torch-mlir is build with a pre-built MLIR and `in-tree` where torch-mlir
+is built as part of the LLVM project along with MLIR.
+
+We mount a ccache and pip cache inside the docker container to speed up iterative builds. Iterative
+builds should be as fast as running without docker.
+
+### In-Tree builds
+
+Build MLIR and Torch-MLIR together as part of the LLVM repo.
+
+```shell
+TM_PACKAGES="in-tree" ./build_tools/python_deploy/build_linux_packages.sh
+```
+
+### Out-of-Tree builds
+
+Build LLVM/MLIR first and then build Torch-MLIR referencing that build
+```shell
+TM_PACKAGES="out-of-tree" ./build_tools/python_deploy/build_linux_packages.sh
+```
+
+### Release builds
+
+Build in a manylinux Docker image so we can upload artifacts to PyPI.
+
+```shell
+TM_PACKAGES="torch-mlir" ./build_tools/python_deploy/build_linux_packages.sh
+```
+
+### Mimicing CI+Release builds
+
+If you wanted to build all the CIs locally
+
+```shell
+TM_PACKAGES="out-of-tree in-tree" ./build_tools/python_deploy/build_linux_packages.sh
+```
+
+If you wanted to build all the CIs and the Release builds (just with Python 3.10 since most other Python builds are redundant)
+
+```shell
+TM_PACKAGES="torch-mlir out-of-tree in-tree" TM_PYTHON_VERSIONS="cp310-cp310" ./build_tools/python_deploy/build_linux_packages.sh
+```
+
+Note: The Release docker still runs as root so it may generate some files owned by root:root. We hope to move it to run as a user in the future.
+
+### Cleaning up
+
+Docker builds tend to leave a wide variety of files around. Luckily most are owned by the user but there are still some that need to be removed
+as superuser.
+
+```shell
+rm -rf build build_oot llvm-build docker_venv externals/pytorch/build .ccache
+```
+
+## Building your own Docker image
+
+If you would like to build your own docker image (usually not necessary). You can run:
+
+```shell
+cd ./build_tools/docker
+docker build -t your-name/torch-mlir-ci --no-cache .
+```
+
+### Other configurable environmental variables
+
+The following additional environmental variables can be used to customie your docker build:
+
+* Custom Release Docker image:
+  Defaults to `stellaraccident/manylinux2014_x86_64-bazel-5.1.0:latest`
+```shell
+  TM_RELEASE_DOCKER_IMAGE="stellaraccident/manylinux2014_x86_64-bazel-5.1.0:latest"
+```
+* Custom CI Docker image:
+  Defaults to `powderluv/torch-mlir-ci:latest`. This assumes an Ubuntu LTS like image. You can build your own with `./build_tools/docker/Dockerfile`
+```shell
+  TM_CI_DOCKER_IMAGE="powderluv/torch-mlir-ci:latest"
+```
+
+* Custom Python Versions for Release builds:
+  Version of Python to use in Release builds. Ignored in CIs. Defaults to `cp38-cp38 cp39-cp39 cp310-cp310`
+```shell
+  TM_PYTHON_VERSIONS="cp38-cp38 cp39-cp39 cp310-cp310"
+```
+
+* Location to store Release build wheels
+```shell
+  TM_OUTPUT_DIR="./build_tools/python_deploy/wheelhouse"
+```
+
+* What "packages" to build:
+  Defaults to torch-mlir. Options are `torch-mlir out-of-tree in-tree`
+```shell
+  TM_PACKAGES="torch-mlir out-of-tree in-tree"
+```
+* Use pre-built Pytorch:
+  Defaults to using pre-built Pytorch. Setting it to `OFF` builds from source
+```shell
+  TM_USE_PYTORCH_BINARY="OFF"
+```
+* Skip running tests
+  Skip running tests if you want quick build only iteration. Default set to `OFF`
+```shell
+  TM_SKIP_TESTS="OFF"
+```
+
+
 ## Build Python Packages
 
 We have preliminary support for building Python packages. This can be done
@@ -205,11 +320,11 @@ Torch-MLIR has two types of tests:
 
 ```shell
 # Run all tests on the reference backend
-./tools/torchscript_e2e_test.sh
+./tools/e2e_test.sh
 # Run tests that match the regex `Conv2d`, with verbose errors.
-./tools/torchscript_e2e_test.sh --filter Conv2d --verbose
+./tools/e2e_test.sh --filter Conv2d --verbose
 # Run tests on the TOSA backend.
-./tools/torchscript_e2e_test.sh --config tosa
+./tools/e2e_test.sh --config tosa
 ```
 
 ## Running unit tests.
@@ -254,41 +369,66 @@ Torch-MLIR by default builds with the latest nightly PyTorch version. This can b
 -DTORCH_MLIR_SRC_PYTORCH_BRANCH=master # Optional. Defaults to PyTorch's main branch
 ```
 
-# Updating the LLVM submodule
+# Updating the LLVM and MLIR-HLO submodules
 
-Torch-MLIR maintains `llvm-project` (which contains, among other things,
-upstream MLIR) as a submodule in `externals/llvm-project`. We aim to update this
-at least weekly to new LLVM revisions to bring in the latest features and spread
-out over time the effort of updating our code for MLIR API breakages.
+Torch-MLIR depends on `llvm-project` (which contains, among other things,
+upstream MLIR) and `mlir-hlo`, both of which are submodules in the `externals/`
+directory. We aim to update these at least weekly to bring in the latest
+features and spread out over time the effort of updating our code for MLIR API
+breakages.
 
-Updating the LLVM submodule is done by:
+## Which LLVM commit should I pick?
 
-1. In the `externals/llvm-project` directory, run `git pull` to update to the
-   upstream revision of interest (such as a particular upstream change that is
-   needed for your Torch-MLIR PR).
-2. Rebuild and test Torch-MLIR (see above), fixing any issues that arise. This
-   might involve fixing various API breakages introduced upstream (they are
-   likely unrelated to what you are working on). If these fixes are too complex,
-   please file a work-in-progress PR explaining the issues you are running into
-   asking for help so that someone from the community can help.
-3. Run `build_tools/update_shape_lib.sh` to update the shape library -- this is
+Since downstream projects may want to build Torch-MLIR (and thus LLVM and
+MLIR-HLO) in various configurations (Release versus Debug builds; on Linux,
+Windows, or macOS; possibly with Clang, LLD, and LLDB enabled), it is crucial to
+pick LLVM commits that pass tests for all combinations of these configurations.
+
+So every week, we track the so-called _green_ commit (i.e. the LLVM commit which
+works with all of the above configurations) in Issue
+https://github.com/llvm/torch-mlir/issues/1178.  In addition to increasing our
+confidence that the resulting update will not break downstream projects, basing
+our submodule updates on these green commits also helps us stay in sync with
+LLVM updates in other projects like ONNX-MLIR and MLIR-HLO.
+
+## What is the update process?
+
+1. **Lookup green commit hashes**: From the Github issue
+   https://github.com/llvm/torch-mlir/issues/1178, find the LLVM and MLIR-HLO
+   green commits for the week when Torch-MLIR is being updated.
+2. **Update the `llvm-project` submodule**: In the `externals/llvm-project`
+   directory, run `git fetch` followed by `git checkout <llvm-commit-hash>`
+   (where `<llvm-commit-hash>` is the green commit hash for the LLVM project
+   from Step 1).
+3. **Update the `mlir-hlo` submodule**: In the `externals/mlir-hlo` directory,
+   run `git fetch` followed by `git checkout <mlir-hlo-commit-hash>` (where
+   `<mlir-hlo-commit-hash>` is the green commit hash for the MLIR-HLO project
+   from Step 1).
+4. **Rebuild and test Torch-MLIR**: See the section "CMake Build" above for
+   instructions, fixing any issues that arise. This might involve fixing various
+   API breakages introduced upstream (they are likely unrelated to what you are
+   working on).  If these fixes are too complex, please file a work-in-progress
+   PR explaining the issues you are running into asking for help so that someone
+   from the community can help.
+5. **Update Shape Library**: Run `build_tools/update_shape_lib.sh`. This is
    sometimes needed because upstream changes can affect canonicalization and
-   other minor details of the IR in the shape library. See [docs/shape_lib.md](docs/shape_lib.md) for more details on the shape library.
+   other minor details of the IR in the shape library. See
+   [docs/shape_lib.md](docs/shape_lib.md) for more details on the shape library.
 
 
-Here are some examples of PR's updating the LLVM submodule:
+Here are some examples of PRs updating the LLVM and MLIR-HLO submodules:
 
-- https://github.com/llvm/torch-mlir/pull/958
-- https://github.com/llvm/torch-mlir/pull/856
+- https://github.com/llvm/torch-mlir/pull/1180
+- https://github.com/llvm/torch-mlir/pull/1229
 
 # Enabling Address Sanitizer (ASan)
 
 To enable ASAN, pass `-DLLVM_USE_SANITIZER=Address` to CMake. This should "just
 work" with all C++ tools like `torch-mlir-opt`. When running a Python script
-such as through `./tools/torchscript_e2e_test.sh`, you will need to do:
+such as through `./tools/e2e_test.sh`, you will need to do:
 
 ```
-LD_PRELOAD="$(clang -print-file-name=libclang_rt.asan-x86_64.so)" ./tools/torchscript_e2e_test.sh -s
+LD_PRELOAD="$(clang -print-file-name=libclang_rt.asan-x86_64.so)" ./tools/e2e_test.sh -s
 # See instructions here for how to get the libasan path for GCC:
 # https://stackoverflow.com/questions/48833176/get-location-of-libasan-from-gcc-clang
 ```
