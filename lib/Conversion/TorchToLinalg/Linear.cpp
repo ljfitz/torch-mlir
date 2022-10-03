@@ -624,6 +624,8 @@ public:
 } // namespace
 
 namespace {
+// TODO: restore ConvertAtenConvolutionOp once AtenConv2dOp related
+// decompositions are re-enabled.
 class ConvertAtenConv2dOp : public OpConversionPattern<AtenConv2dOp> {
 public:
   using OpConversionPattern::OpConversionPattern;

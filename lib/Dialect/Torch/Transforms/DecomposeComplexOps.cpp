@@ -2535,6 +2535,7 @@ class DecomposeComplexOpsPass
     patterns.add<DecomposeAtenLayerNormOp>(context);
     target.addIllegalOp<AtenNativeBatchNormOp>();
     patterns.add<DecomposeAtenNativeBatchNormOp>(context);
+    // TODO: restore AtenConv2dOp related decompositions:
     // target.addIllegalOp<AtenConvolutionOverrideableOp>();
     // patterns.add<DecomposeAtenConvolutionOverrideableOp>(context);
     // target.addIllegalOp<Aten_ConvolutionOp>();
